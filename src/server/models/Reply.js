@@ -6,6 +6,7 @@ const replySchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  
   originalTweet: {
     id: String,
     text: String,
