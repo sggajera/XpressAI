@@ -20,22 +20,28 @@ import {
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   SendAll as SendAllIcon,
+  Delete as DeleteIcon,
 } from '@mui/icons-material';
 import XIcon from '../Icons/XIcon';
 
-const ReplyQueue = ({ queuedReplies = [] }) => {
+const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
   const [sending, setSending] = useState(new Set());
   const [sendingAll, setSendingAll] = useState(false);
 
-  const handleSendReply = async (replyId) => {
-    setSending(prev => new Set([...prev, replyId]));
-    // TODO: Implement actual sending
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setSending(prev => {
-      const next = new Set(prev);
-      next.delete(replyId);
-      return next;
-    });
+  const handleSendReply = async (reply) => {
+    setSending(prev => new Set([...prev, reply.id]));
+    try {
+      // TODO: Implement actual sending
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      // After successful send, remove from queue and DB
+      await onRemoveReply(reply.tweetId);
+    } finally {
+      setSending(prev => {
+        const next = new Set(prev);
+        next.delete(reply.id);
+        return next;
+      });
+    }
   };
 
   const handleSendAll = async () => {
@@ -45,10 +51,29 @@ const ReplyQueue = ({ queuedReplies = [] }) => {
     try {
       // Send all replies in sequence
       for (const reply of queuedReplies) {
-        await handleSendReply(reply.id);
+        await handleSendReply(reply);
       }
     } finally {
       setSendingAll(false);
+    }
+  };
+
+  // Add a helper function to format the date
+  const formatDate = (dateString) => {
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      });
+    } catch (error) {
+      return 'Invalid Date';
     }
   };
 
@@ -136,7 +161,7 @@ const ReplyQueue = ({ queuedReplies = [] }) => {
         <List sx={{ maxHeight: '75vh', overflow: 'auto' }}>
           {queuedReplies.map((reply) => (
             <ListItem key={reply.id} sx={{ px: 0 }}>
-              <Card variant="outlined" sx={{ width: '100%' }}>
+              <Card variant="outlined" sx={{ width: '100%', position: 'relative' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                     <XIcon fontSize="small" />
@@ -144,15 +169,31 @@ const ReplyQueue = ({ queuedReplies = [] }) => {
                       {reply.username}
                     </Typography>
                   </Box>
-                  
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                     {reply.originalTweet}
                   </Typography>
+                  
+                  <Box sx={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    gap: 1,
+                    my: 2,
+                  }}>
+                    <Box sx={{ flex: 1, borderBottom: '1px solid', borderColor: 'divider' }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ 
+                      fontSize: '0.65rem',
+                      opacity: 0.7,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px'
+                    }}>
+                      Reply
+                    </Typography>
+                    <Box sx={{ flex: 1, borderBottom: '1px solid', borderColor: 'divider' }} />
+                  </Box>
                   
                   <Typography variant="body2" sx={{ mb: 2 }}>
                     {reply.replyText}
                   </Typography>
-
                   <Box sx={{ 
                     display: 'flex', 
                     flexDirection: 'column',
@@ -162,36 +203,41 @@ const ReplyQueue = ({ queuedReplies = [] }) => {
                     borderTop: '1px solid',
                     borderColor: 'divider',
                   }}>
-                    <Button
-                      size="large"
-                      variant="contained"
-                      startIcon={<SendIcon />}
-                      onClick={() => handleSendReply(reply.id)}
-                      disabled={sending.has(reply.id)}
-                      fullWidth
-                      sx={{
-                        background: 'linear-gradient(45deg, #000000 30%, #2C2C2C 90%)',
-                        boxShadow: '0 3px 8px 2px rgba(0, 0, 0, 0.3)',
-                        color: '#E8E8E8',
-                        height: '48px',
-                        mx: 1,
-                        borderRadius: '8px',
-                        textTransform: 'none',
-                        fontSize: '1rem',
-                        '&:hover': {
-                          background: 'linear-gradient(45deg, #1A1A1A 30%, #383838 90%)',
-                          boxShadow: '0 4px 10px 3px rgba(0, 0, 0, 0.4)',
-                        },
-                        '&.Mui-disabled': {
-                          background: 'linear-gradient(45deg, #666666 30%, #888888 90%)',
-                          color: 'rgba(255, 255, 255, 0.5)',
-                          boxShadow: 'none',
-                        }
-                      }}
-                    >
-                      {sending.has(reply.id) ? 'Sending...' : 'Send Now'}
-                    </Button>
-                    
+                    <Box sx={{ 
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 2,
+                    }}>
+                      <Button
+                        size="large"
+                        variant="contained"
+                        startIcon={<SendIcon />}
+                        onClick={() => handleSendReply(reply)}
+                        disabled={sending.has(reply.id)}
+                        sx={{
+                          flex: 1,
+                          background: 'linear-gradient(45deg, #000000 30%, #2C2C2C 90%)',
+                          boxShadow: '0 3px 8px 2px rgba(0, 0, 0, 0.3)',
+                          color: '#E8E8E8',
+                          height: '48px',
+                          borderRadius: '8px',
+                          textTransform: 'none',
+                          fontSize: '1rem',
+                          '&:hover': {
+                            background: 'linear-gradient(45deg, #1A1A1A 30%, #383838 90%)',
+                            boxShadow: '0 4px 10px 3px rgba(0, 0, 0, 0.4)',
+                          },
+                          '&.Mui-disabled': {
+                            background: 'linear-gradient(45deg, #666666 30%, #888888 90%)',
+                            color: 'rgba(255, 255, 255, 0.5)',
+                            boxShadow: 'none',
+                          }
+                        }}
+                      >
+                        {sending.has(reply.id) ? 'Sending...' : 'Send Now'}
+                      </Button>
+                    </Box>
                     <Typography 
                       variant="caption" 
                       color="text.secondary"
@@ -201,7 +247,7 @@ const ReplyQueue = ({ queuedReplies = [] }) => {
                         opacity: 0.8
                       }}
                     >
-                      Queued: {new Date(reply.queuedAt).toLocaleString()}
+                      Queued: {formatDate(reply.queuedAt)}
                     </Typography>
                   </Box>
                 </CardContent>

@@ -1,48 +1,51 @@
+// Define mockTweets first since it's used in mockTrackedAccounts
+const mockTweets = {
+  data: [
+    {
+      id: '1',
+      text: 'Just had a great meeting about Tesla Autopilot progress',
+      username: 'elonmusk',
+      public_metrics: {
+        like_count: 50000,
+        retweet_count: 5000,
+        reply_count: 3000
+      }
+    },
+    {
+      id: '2',
+      text: 'SpaceX Starship update coming soon',
+      username: 'elonmusk',
+      public_metrics: {
+        like_count: 75000,
+        retweet_count: 8000,
+        reply_count: 4500
+      }
+    }
+  ]
+};
+
+const mockUserData = {
+  data: {
+    id: '44196397',
+    name: 'Elon Musk',
+    username: 'elonmusk',
+    description: 'Owner of X'
+  }
+};
+
+// Now define mockTrackedAccounts using the mockTweets data
 const mockTrackedAccounts = [
   {
     username: 'elonmusk',
     twitterId: '44196397',
-    lastChecked: new Date(),
-    isActive: true,
-    keywords: ['tesla', 'space', 'x'],
-    tweets: [
-      {
-        id: '1',
-        text: 'Just had a great meeting with the SpaceX team! Starship progress is accelerating.',
-        created_at: '2024-01-20T10:00:00.000Z',
-        public_metrics: {
-          retweet_count: 5000,
-          reply_count: 3000,
-          like_count: 50000
-        }
-      },
-      {
-        id: '2',
-        text: 'Tesla Model Y is now the best selling vehicle worldwide! Thanks to the amazing Tesla team ♥️',
-        created_at: '2024-01-19T15:30:00.000Z',
-        public_metrics: {
-          retweet_count: 4000,
-          reply_count: 2000,
-          like_count: 45000
-        }
-      },
-      {
-        id: '3',
-        text: 'The future of AI is both exciting and challenging. We need to ensure it benefits humanity.',
-        created_at: '2024-01-19T12:00:00.000Z',
-        public_metrics: {
-          retweet_count: 6000,
-          reply_count: 4000,
-          like_count: 55000
-        }
-      }
-    ]
+    lastChecked: new Date().toISOString(),
+    keywords: ['Tesla', 'SpaceX'],
+    tweets: mockTweets.data
   },
   {
     username: 'BillGates',
     twitterId: '50393960',
-    lastChecked: new Date(),
-    isActive: true,
+    lastChecked: new Date().toISOString(),
     keywords: ['climate', 'health', 'technology'],
     tweets: [
       {
@@ -136,30 +139,6 @@ const mockTrackedAccounts = [
     ]
   }
 ];
-
-const mockUserData = {
-  data: {
-    id: '123456',
-    name: 'Test User',
-    username: 'testuser',
-    description: 'This is a mock user for testing'
-  }
-};
-
-const mockTweets = {
-  data: [
-    {
-      id: '1',
-      text: 'This is a mock tweet',
-      created_at: new Date().toISOString(),
-      public_metrics: {
-        retweet_count: 100,
-        reply_count: 50,
-        like_count: 1000
-      }
-    }
-  ]
-};
 
 module.exports = {
   mockTrackedAccounts,

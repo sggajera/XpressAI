@@ -62,8 +62,13 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
         if (data.success) {
           const approvedSet = new Set(data.data.map(reply => reply.tweetId));
           setApprovedReplies(approvedSet);
-          // Also add to queue
-          data.data.forEach(reply => onAddToQueue(reply));
+          
+          // Only add to queue if not already approved
+          data.data.forEach(reply => {
+            if (!approvedReplies.has(reply.tweetId)) {
+              onAddToQueue(reply);
+            }
+          });
         }
       } catch (error) {
         console.error('Error loading approved replies:', error);
@@ -71,27 +76,46 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
     };
 
     loadApprovedReplies();
-  }, [onAddToQueue]);
+  }, []); // Remove onAddToQueue from dependencies
 
   const fetchTrackedAccounts = async () => {
     try {
-      const response = await fetch('/api/twitter/tracked-accounts');
+      const response = await fetch('http://localhost:8081/api/twitter/tracked-accounts');
       const data = await response.json();
+      console.log('Fetched accounts data:', data);
       if (data.success) {
-        setAccounts(data.data);
+        // Ensure tweets array exists for each account
+        const accountsWithTweets = data.data.map(account => ({
+          ...account,
+          tweets: account.tweets || []
+        }));
+        setAccounts(accountsWithTweets);
+
+        // Set suggestions for approved replies
+        const approvedRepliesData = await fetch('/api/twitter/approved-replies');
+        const approvedRepliesJson = await approvedRepliesData.json();
+        if (approvedRepliesJson.success) {
+          const approvedRepliesMap = new Map(approvedRepliesJson.data.map(reply => [reply.tweetId, reply.replyText]));
+          setSuggestions(prev => ({
+            ...prev,
+            ...Object.fromEntries(approvedRepliesMap)
+          }));
+        }
       }
     } catch (error) {
       console.error('Error fetching tracked accounts:', error);
+      setAccounts([]);
     } finally {
       setLoading(false);
     }
   };
 
   const handleAccountClick = async (account) => {
+    console.log('Selected account:', account);
     setSelectedAccount(selectedAccount?.username === account.username ? null : account);
     
     // Generate replies for all tweets that don't have suggestions yet
-    if (account.tweets) {
+    if (account.tweets && account.tweets.length > 0) {
       account.tweets.forEach(async (tweet) => {
         if (!suggestions[tweet.id]) {
           await generateReply(tweet);
@@ -135,6 +159,11 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
 
   const handleApproveReply = async (tweet, reply) => {
     try {
+      // Check if already approved to prevent duplicate
+      if (approvedReplies.has(tweet.id)) {
+        return;
+      }
+
       // Store in DB
       await fetch('/api/twitter/approved-replies', {
         method: 'POST',
@@ -148,30 +177,62 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
             originalTweet: tweet.text,
             replyText: reply,
             tweetId: tweet.id,
+            queuedAt: new Date().toISOString(),
           }
         }),
       });
 
       // Update local state
       setApprovedReplies(prev => new Set([...prev, tweet.id]));
+      
+      // Add to queue only if not already in approvedReplies
       onAddToQueue({
         username: selectedAccount.username,
         originalTweet: tweet.text,
         replyText: reply,
-        tweetId: tweet.id
+        tweetId: tweet.id,
+        queuedAt: new Date().toISOString(),
       });
+
+      // Disable editing mode
+      setEditingReply(null);
     } catch (error) {
       console.error('Error storing approved reply:', error);
     }
   };
 
-  const handleUnapprove = (tweet) => {
-    setApprovedReplies(prev => {
-      const next = new Set(prev);
-      next.delete(tweet.id);
-      return next;
-    });
-    onRemoveFromQueue(tweet.id);
+  const handleUnapprove = async (tweet) => {
+    try {
+      // Remove from DB first
+      const response = await fetch(`/api/twitter/approved-replies/${tweet.id}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to remove reply from database');
+      }
+      
+      // Update local state
+      setApprovedReplies(prev => {
+        const next = new Set(prev);
+        next.delete(tweet.id);
+        return next;
+      });
+      
+      // Remove from queue - ensure we're passing the correct ID structure
+      if (onRemoveFromQueue) {
+        console.log('Unapproving tweet with ID:', tweet.id);
+        onRemoveFromQueue(tweet.id);
+      }
+
+      // Put the message back in the suggested reply
+      setSuggestions(prev => ({
+        ...prev,
+        [tweet.id]: prev[tweet.id] || 'No suggestion available' // Restore the suggestion
+      }));
+    } catch (error) {
+      console.error('Error removing approved reply:', error);
+    }
   };
 
   const handleAIEditClick = (event, tweet) => {
@@ -179,6 +240,35 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
     setEditingContext(true);
     setContext('');
     setCurrentTweet(tweet);
+  };
+
+  const handleSaveEditedReply = (tweetId, newReplyText) => {
+    setSuggestions(prev => ({
+      ...prev,
+      [tweetId]: newReplyText
+    }));
+    setEditingReply(null);
+  };
+
+  // Add a helper function to format the date
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Never';
+    
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Invalid Date';
+      
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: true
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
   };
 
   return (
@@ -198,7 +288,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
 
       {loading ? (
         <Typography color="text.secondary">Loading accounts...</Typography>
-      ) : accounts.length === 0 ? (
+      ) : !Array.isArray(accounts) || accounts.length === 0 ? (
         <Typography color="text.secondary">No accounts tracked yet</Typography>
       ) : (
         <List>
@@ -213,7 +303,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
                   </ListItemAvatar>
                   <ListItemText 
                     primary={account.username}
-                    secondary={`Last checked: ${new Date(account.lastChecked).toLocaleString()}`}
+                    secondary={`Last checked: ${formatDate(account.lastChecked)}`}
                   />
                   {account.keywords.length > 0 && (
                     <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
@@ -396,7 +486,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
                           <Box sx={{ 
                             p: 2,
                             flex: 1,
-                          }}>
+                          }} data-tweet-id={tweet.id}>
                             {editingReply === tweet.id ? (
                               <TextField
                                 fullWidth
@@ -404,6 +494,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
                                 rows={4}
                                 defaultValue={suggestions[tweet.id]}
                                 placeholder="Edit reply..."
+                                onBlur={(e) => handleSaveEditedReply(tweet.id, e.target.value)}
                               />
                             ) : (
                               <Typography 
@@ -438,19 +529,24 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
                               width: '100%',
                               height: '100%',
                             }}>
-                              <Button
-                                size="small"
-                                startIcon={<AIIcon sx={{ fontSize: 18 }} />}
-                                onClick={(e) => handleAIEditClick(e, tweet)}
-                                sx={{ 
-                                  minWidth: 'auto',
-                                  py: 0.5,
-                                  fontSize: '0.75rem',
-                                }}
-                              >
-                                Edit with AI
-                              </Button>
+                              {/* Left side - Edit with AI button */}
+                              <Box sx={{ width: '120px' }}>
+                                <Button
+                                  size="small"
+                                  startIcon={<AIIcon sx={{ fontSize: 18 }} />}
+                                  onClick={(e) => handleAIEditClick(e, tweet)}
+                                  disabled={approvedReplies.has(tweet.id)}
+                                  sx={{ 
+                                    minWidth: 'auto',
+                                    py: 0.5,
+                                    fontSize: '0.75rem',
+                                  }}
+                                >
+                                  Edit with AI
+                                </Button>
+                              </Box>
 
+                              {/* Middle - Approve/Approved button */}
                               {!approvedReplies.has(tweet.id) ? (
                                 <Button
                                   variant="contained"
@@ -458,7 +554,12 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
                                   size="small"
                                   startIcon={<CheckIcon sx={{ fontSize: 18 }} />}
                                   onClick={() => handleApproveReply(tweet, suggestions[tweet.id])}
-                                  disabled={!suggestions[tweet.id] || suggestions[tweet.id] === 'Generating suggestion...'}
+                                  disabled={
+                                    !suggestions[tweet.id] || 
+                                    suggestions[tweet.id] === 'Generating suggestion...' ||
+                                    editingReply === tweet.id ||
+                                    (Boolean(anchorEl) && editingContext && currentTweet?.id === tweet.id)
+                                  }
                                   sx={{ 
                                     minWidth: '110px',
                                     height: '32px',
@@ -504,18 +605,42 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue }) => {
                                 />
                               )}
 
-                              <Button
-                                size="small"
-                                startIcon={<EditIcon sx={{ fontSize: 18 }} />}
-                                onClick={() => setEditingReply(editingReply === tweet.id ? null : tweet.id)}
-                                sx={{ 
-                                  minWidth: 'auto',
-                                  py: 0.5,
-                                  fontSize: '0.75rem',
-                                }}
-                              >
-                                Edit Text
-                              </Button>
+                              {/* Right side - Edit Text button or Save button */}
+                              <Box sx={{ width: '120px', display: 'flex', justifyContent: 'flex-end' }}>
+                                {editingReply === tweet.id ? (
+                                  <Button
+                                    size="small"
+                                    startIcon={<CheckIcon sx={{ fontSize: 18 }} />}
+                                    onClick={() => {
+                                      const textField = document.querySelector(`[data-tweet-id="${tweet.id}"] textarea`);
+                                      if (textField) {
+                                        handleSaveEditedReply(tweet.id, textField.value);
+                                      }
+                                    }}
+                                    sx={{ 
+                                      minWidth: 'auto',
+                                      py: 0.5,
+                                      fontSize: '0.75rem',
+                                    }}
+                                  >
+                                    Save
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="small"
+                                    startIcon={<EditIcon sx={{ fontSize: 18 }} />}
+                                    onClick={() => setEditingReply(editingReply === tweet.id ? null : tweet.id)}
+                                    disabled={approvedReplies.has(tweet.id)}
+                                    sx={{ 
+                                      minWidth: 'auto',
+                                      py: 0.5,
+                                      fontSize: '0.75rem',
+                                    }}
+                                  >
+                                    Edit Text
+                                  </Button>
+                                )}
+                              </Box>
                             </Box>
                           </Box>
                         </Paper>

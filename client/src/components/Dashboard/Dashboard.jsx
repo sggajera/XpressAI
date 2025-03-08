@@ -44,15 +44,43 @@ const Dashboard = () => {
   }, []);
 
   const handleAddToQueue = (reply) => {
-    setQueuedReplies(prev => [...prev, {
-      id: Date.now(),
-      queuedAt: new Date(),
-      ...reply
-    }]);
+    // Check if reply is already in queue
+    setQueuedReplies(prev => {
+      const exists = prev.some(item => item.tweetId === reply.tweetId);
+      if (exists) {
+        return prev;
+      }
+      return [...prev, {
+        id: Date.now(),
+        queuedAt: new Date().toISOString(),
+        ...reply
+      }];
+    });
   };
 
-  const handleRemoveFromQueue = (tweetId) => {
-    setQueuedReplies(prev => prev.filter(reply => reply.tweetId !== tweetId));
+  const handleRemoveFromQueue = async (tweetId) => {
+    try {
+      console.log('Removing tweet from queue:', tweetId);
+      
+      // Remove from DB first
+      const response = await fetch(`/api/twitter/approved-replies/${tweetId}`, {
+        method: 'DELETE',
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to remove reply from database');
+      }
+      
+      // Remove from local state
+      setQueuedReplies(prev => {
+        console.log('Current queue:', prev);
+        console.log('Filtering out tweet ID:', tweetId);
+        // Filter out the reply with the matching tweetId
+        return prev.filter(reply => reply.tweetId !== tweetId);
+      });
+    } catch (error) {
+      console.error('Error removing reply from queue:', error);
+    }
   };
 
   return (
@@ -116,7 +144,10 @@ const Dashboard = () => {
 
             {/* Reply Queue - Always visible */}
             <Grid item xs={12} md={3}>
-              <ReplyQueue queuedReplies={queuedReplies} />
+              <ReplyQueue 
+                queuedReplies={queuedReplies}
+                onRemoveReply={handleRemoveFromQueue}
+              />
             </Grid>
           </Grid>
         </Grid>

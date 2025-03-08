@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Drawer,
   List,
@@ -25,9 +26,16 @@ import theme from '../../theme';
 
 const Sidebar = () => {
   const [open, setOpen] = useState(false);
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate('/login');
+  };
 
   const menuItems = [
-    { title: 'Profile', icon: <ProfileIcon />, action: () => console.log('Profile clicked') },
+    { title: 'Profile', icon: <ProfileIcon />, action: () => navigate('/profile') },
     { title: 'Account Management', icon: <AccountIcon />, action: () => console.log('Account clicked') },
     { title: 'Scheduler', icon: <ScheduleIcon />, action: () => console.log('Scheduler clicked') },
     { title: 'Settings', icon: <SettingsIcon />, action: () => console.log('Settings clicked') },
@@ -124,6 +132,7 @@ const Sidebar = () => {
 
             <ListItem 
               button 
+              onClick={handleLogout}
               sx={{
                 color: 'error.main',
                 borderRadius: 1,
