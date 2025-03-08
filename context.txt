@@ -1,0 +1,31 @@
+🔹 Web App Features
+Dashboard – Overview of tracked accounts, pending replies, and analytics.
+Tweet Reply Generator – Generates AI-powered replies based on user context.
+Scheduled Review System – Users can schedule reply reviews at morning, evening, or custom times.
+On-Demand Reply Generation – Users can request an instant AI-generated reply.
+Settings & Customization – Allows users to manage preferences, API keys, and notification settings.
+🔹 Tech Stack & Frameworks for Web (ReactJS)
+Frontend (ReactJS)
+Framework: ReactJS (⚛️) – For building a modern, interactive UI.
+UI Library: Tailwind CSS – Lightweight and fast styling framework.
+State Management: Redux Toolkit – For managing global state efficiently.
+API Calls: Axios – For handling API requests to the backend.
+Routing: React Router – For navigating between pages.
+Form Handling: React Hook Form – For handling user input efficiently.
+Notifications: React Toastify – For showing success/error messages.
+Backend (Node.js + Express)
+Framework: Express.js – Lightweight Node.js framework for handling API requests.
+Database: PostgreSQL (via Prisma ORM) or MongoDB (via Mongoose).
+Job Scheduling: BullMQ (Redis) – For managing scheduled and on-demand replies.
+Authentication: Firebase Auth or OAuth (Google/Twitter login).
+Hosting & Deployment
+Frontend Hosting: Vercel or Netlify – For easy deployment.
+Backend Hosting: AWS/GCP (using a Node.js server on EC2 or Cloud Run).
+Database Hosting: Supabase (PostgreSQL) or MongoDB Atlas.
+🔹 Web App Workflow
+User logs in → OAuth authentication (Google/Twitter).
+Tracks tweets → Selects keywords/accounts to track.
+AI generates replies → OpenAI API processes the context.
+User reviews/edit replies → Option to approve, edit, or discard.
+Scheduling system → Replies are scheduled or generated instantly on demand.
+User receives notifications → When replies are ready for approval.
