@@ -2,8 +2,8 @@
     "name": "express-ai",
     "version": "1.0.0",
     "scripts": {
-        "start": "node src/server/index.js",
-        "dev": "nodemon src/server/index.js",
+        "start": "node server/src/index.js",
+        "dev": "nodemon server/src/index.js",
         "client": "cd client && npm start",
         "dev:full": "concurrently \"npm run dev\" \"npm run client\"",
         "build": "cd client && npm run build"
