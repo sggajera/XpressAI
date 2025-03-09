@@ -13,7 +13,12 @@ const tweetSchema = new mongoose.Schema({
 });
 
 const trackedAccountSchema = new mongoose.Schema({
-  username: String,
+  username: {
+    type: String,
+    required: true,
+    lowercase: true,
+    trim: true
+  },
   twitterId: String,
   lastChecked: Date,
   keywords: [String],
@@ -37,7 +42,15 @@ const userSchema = new mongoose.Schema({
   preferences: {
     trackedAccounts: {
       type: [trackedAccountSchema],
-      default: []
+      default: [],
+      validate: {
+        validator: function(accounts) {
+          const usernames = accounts.map(acc => acc.username.toLowerCase());
+          const uniqueUsernames = new Set(usernames);
+          return usernames.length === uniqueUsernames.size;
+        },
+        message: 'Duplicate Twitter accounts are not allowed'
+      }
     },
     replySettings: {
       tone: {

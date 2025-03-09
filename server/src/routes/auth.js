@@ -21,7 +21,14 @@ router.post('/register', async (req, res) => {
     const user = new User({
       email,
       password,
-      name
+      name,
+      preferences: {
+        trackedAccounts: [],
+        replySettings: {
+          tone: 'professional',
+          autoApprove: false
+        }
+      }
     });
 
     await user.save();
@@ -33,19 +40,28 @@ router.post('/register', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // Send response without password
+    const userResponse = {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      preferences: user.preferences,
+      createdAt: user.createdAt
+    };
+
     res.status(201).json({
       success: true,
       data: {
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name
-        },
+        user: userResponse,
         token
       }
     });
   } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
+    console.error('Registration error:', error);
+    res.status(400).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 
@@ -79,19 +95,28 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // Send response without password
+    const userResponse = {
+      id: user._id,
+      email: user.email,
+      name: user.name,
+      preferences: user.preferences,
+      createdAt: user.createdAt
+    };
+
     res.json({
       success: true,
       data: {
-        user: {
-          id: user._id,
-          email: user.email,
-          name: user.name
-        },
+        user: userResponse,
         token
       }
     });
   } catch (error) {
-    res.status(400).json({ success: false, error: error.message });
+    console.error('Login error:', error);
+    res.status(400).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 

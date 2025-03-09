@@ -23,15 +23,15 @@ import {
   Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import theme from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
 const Sidebar = () => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    navigate('/login');
+    logout();
   };
 
   const menuItems = [

@@ -11,18 +11,22 @@ import {
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import XIcon from '../Icons/XIcon';
+import { useAuth } from '../../context/AuthContext';
 
-const AccountTracker = () => {
+const AccountTracker = ({ onAccountAdded }) => {
   const [username, setUsername] = useState('');
   const [trackingResult, setTrackingResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const { getStoredToken } = useAuth();
 
   const startTracking = async () => {
     try {
       setLoading(true);
+      const token = getStoredToken();
       const response = await fetch('/api/twitter/track', {
         method: 'POST',
         headers: {
+          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ username: username.replace('@', '') }),
@@ -35,6 +39,10 @@ const AccountTracker = () => {
       
       setTrackingResult(data.data);
       setUsername('');
+      
+      if (onAccountAdded) {
+        onAccountAdded();
+      }
     } catch (error) {
       console.error('Error:', error);
       setTrackingResult({ 

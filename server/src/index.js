@@ -6,6 +6,7 @@ const connectDB = require('./config/db');
 const mongoose = require('mongoose');
 const { generateReply } = require('./services/openai');
 const { postTweet, getTweet, testConnection, startTracking, getTrackedAccounts } = require('./services/twitter');
+const auth = require('./middleware/auth');
 
 const app = express();
 
@@ -16,7 +17,12 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 connectDB();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3000',
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // Import routes
@@ -25,7 +31,7 @@ const apiRoutes = require('./routes/api');
 
 // Use routes
 app.use('/auth', authRoutes);
-app.use('/api', apiRoutes);
+app.use('/api', auth, apiRoutes);
 
 // API Routes
 app.get('/api/health', (req, res) => {
@@ -147,21 +153,37 @@ app.post('/api/twitter/track', async (req, res) => {
       return res.status(400).json({ error: 'Username is required' });
     }
 
+    // Check if account is already being tracked by this user
+    const User = require('./models/User');
+    const existingTracking = await User.findOne({
+      _id: req.user._id,
+      'preferences.trackedAccounts.username': username.toLowerCase()
+    });
+
+    if (existingTracking) {
+      return res.status(400).json({
+        success: false,
+        error: `Account @${username} is already being tracked`
+      });
+    }
+
     const result = await startTracking(username);
     
-    // Save to database
-    const User = require('./models/User');
-    await User.findOneAndUpdate(
-      { email: 'test@example.com' }, // For testing, replace with actual user
+    // Save to database with normalized username (lowercase) for the authenticated user
+    await User.findByIdAndUpdate(
+      req.user._id,
       { 
         $addToSet: { 
           'preferences.trackedAccounts': {
-            username: username,
-            keywords: []
+            username: username.toLowerCase(),
+            twitterId: result.user.id,
+            lastChecked: new Date(),
+            keywords: [],
+            tweets: result.tweets || []
           }
         }
       },
-      { upsert: true }
+      { new: true }
     );
 
     res.json({ 

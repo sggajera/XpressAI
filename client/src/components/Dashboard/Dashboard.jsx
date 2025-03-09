@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   Box,
   Container,
@@ -14,74 +14,195 @@ import ReplyQueue from './ReplyQueue';
 import XIcon from '../Icons/XIcon';
 import Sidebar from './Sidebar';
 import theme from '../../theme';
+import { useAuth } from '../../context/AuthContext';
 
 const Dashboard = () => {
-  const [dbStatus, setDbStatus] = useState('Checking...');
   const [queuedReplies, setQueuedReplies] = useState([]);
+  const [approvedReplies, setApprovedReplies] = useState(new Set());
+  const [loading, setLoading] = useState(true);
+  const [accounts, setAccounts] = useState([]);
+  const [rateLimitInfo, setRateLimitInfo] = useState(null);
+  const initialFetchRef = useRef(false);
+  const { getStoredToken } = useAuth();
 
-  useEffect(() => {
-    fetch('/api/test-db')
-      .then(res => res.json())
-      .then(data => setDbStatus(data.status))
-      .catch(err => setDbStatus('Database connection failed'));
-  }, []);
+  const fetchAccounts = async () => {
+    try {
+      setLoading(true);
+      const token = getStoredToken();
+      const headers = {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      };
 
-  // Load queued replies from approved replies on mount
+      const accountsResponse = await fetch('/api/twitter/tracked-accounts', { headers });
+      const accountsData = await accountsResponse.json();
+      
+      if (accountsData.success) {
+        const accountsWithTweets = accountsData.data.map(account => {
+          // Handle both direct tweets array and tweets.data structure
+          const tweets = Array.isArray(account.tweets) 
+            ? account.tweets 
+            : Array.isArray(account.tweets?.data)
+              ? account.tweets.data
+              : [];
+            
+          return {
+            ...account,
+            tweets: tweets
+          };
+        });
+        
+        setAccounts(accountsWithTweets);
+        
+        // Update rate limit info
+        if (accountsData.rateLimit) {
+          setRateLimitInfo(accountsData.rateLimit);
+        }
+        
+        // If data is from cache, show a notification
+        if (accountsData.fromCache) {
+          console.log('Using cached data:', accountsData.error || 'Rate limit reached');
+        }
+      } else {
+        console.error('Failed to fetch accounts:', accountsData.error);
+      }
+    } catch (error) {
+      console.error('Error fetching accounts:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Load initial data on mount
   useEffect(() => {
-    const loadQueuedReplies = async () => {
+    const fetchInitialData = async () => {
+      // Skip if we've already fetched
+      if (initialFetchRef.current) return;
+      initialFetchRef.current = true;
+
       try {
-        const response = await fetch('/api/twitter/approved-replies');
-        const data = await response.json();
-        if (data.success) {
-          setQueuedReplies(data.data);
+        setLoading(true);
+        const token = getStoredToken();
+        const headers = {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        };
+
+        // Fetch both tracked accounts and approved replies in parallel
+        const [accountsResponse, repliesResponse] = await Promise.all([
+          fetch('/api/twitter/tracked-accounts', { headers }),
+          fetch('/api/twitter/approved-replies', { headers })
+        ]);
+
+        const [accountsData, repliesData] = await Promise.all([
+          accountsResponse.json(),
+          repliesResponse.json()
+        ]);
+        
+        if (accountsData.success) {
+          const accountsWithTweets = accountsData.data.map(account => ({
+            ...account,
+            tweets: account.tweets || []
+          }));
+          setAccounts(accountsWithTweets);
+        }
+
+        if (repliesData.success) {
+          const approvedSet = new Set(repliesData.data.map(reply => reply.tweetId));
+          setApprovedReplies(approvedSet);
+          setQueuedReplies(repliesData.data.map(reply => ({
+            ...reply,
+            id: Date.now(),
+            queuedAt: reply.queuedAt || new Date().toISOString()
+          })));
         }
       } catch (error) {
-        console.error('Error loading queued replies:', error);
+        console.error('Error loading initial data:', error);
+      } finally {
+        setLoading(false);
       }
     };
 
-    loadQueuedReplies();
-  }, []);
+    fetchInitialData();
+  }, [getStoredToken]); // Add getStoredToken to dependencies
 
-  const handleAddToQueue = (reply) => {
-    // Check if reply is already in queue
-    setQueuedReplies(prev => {
-      const exists = prev.some(item => item.tweetId === reply.tweetId);
-      if (exists) {
-        return prev;
-      }
-      return [...prev, {
-        id: Date.now(),
-        queuedAt: new Date().toISOString(),
-        ...reply
-      }];
-    });
-  };
-
-  const handleRemoveFromQueue = async (tweetId) => {
+  const handleAddToQueue = useCallback(async (reply) => {
     try {
-      console.log('Removing tweet from queue:', tweetId);
-      
-      // Remove from DB first
+      // Check if already in queue
+      if (approvedReplies.has(reply.tweetId)) {
+        return;
+      }
+
+      const token = getStoredToken();
+      const response = await fetch('/api/twitter/approved-replies', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          tweetId: reply.tweetId,
+          reply: reply
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to add reply to queue');
+      }
+
+      // Update local state only after successful API call
+      setQueuedReplies(prev => [
+        ...prev,
+        {
+          ...reply,
+          id: Date.now(),
+          queuedAt: new Date().toISOString()
+        }
+      ]);
+      setApprovedReplies(prev => new Set([...prev, reply.tweetId]));
+    } catch (error) {
+      console.error('Error adding reply to queue:', error);
+    }
+  }, [approvedReplies, getStoredToken]);
+
+  const handleRemoveFromQueue = useCallback(async (tweetId) => {
+    try {
+      const token = getStoredToken();
+      console.log('Removing tweet:', tweetId); // Debug log
+      console.log('Using token:', token); // Debug log
+
       const response = await fetch(`/api/twitter/approved-replies/${tweetId}`, {
         method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
       
       if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error response:', errorData); // Debug log
         throw new Error('Failed to remove reply from database');
       }
       
-      // Remove from local state
-      setQueuedReplies(prev => {
-        console.log('Current queue:', prev);
-        console.log('Filtering out tweet ID:', tweetId);
-        // Filter out the reply with the matching tweetId
-        return prev.filter(reply => reply.tweetId !== tweetId);
+      setQueuedReplies(prev => prev.filter(reply => reply.tweetId !== tweetId));
+      setApprovedReplies(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tweetId);
+        return newSet;
       });
     } catch (error) {
       console.error('Error removing reply from queue:', error);
     }
-  };
+  }, [getStoredToken]);
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ flexGrow: 1 }}>
@@ -116,6 +237,14 @@ const Dashboard = () => {
           >
             Xpress AI
           </Typography>
+          {rateLimitInfo && rateLimitInfo.active && (
+            <Chip
+              label={`Rate limited - ${rateLimitInfo.minutesRemaining} mins remaining`}
+              color="warning"
+              size="small"
+              sx={{ ml: 'auto' }}
+            />
+          )}
         </Toolbar>
       </AppBar>
 
@@ -129,7 +258,7 @@ const Dashboard = () => {
         <Grid container spacing={3}>
           {/* Top Row - Account Tracker */}
           <Grid item xs={12}>
-            <AccountTracker />
+            <AccountTracker onAccountAdded={fetchAccounts} />
           </Grid>
 
           {/* Main Content */}
@@ -139,6 +268,10 @@ const Dashboard = () => {
               <TrackedAccountsList 
                 onAddToQueue={handleAddToQueue} 
                 onRemoveFromQueue={handleRemoveFromQueue}
+                approvedReplies={approvedReplies}
+                queuedReplies={queuedReplies}
+                accounts={accounts}
+                loading={loading}
               />
             </Grid>
 

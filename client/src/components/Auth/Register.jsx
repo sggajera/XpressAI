@@ -10,6 +10,7 @@ import {
   Container
 } from '@mui/material';
 import XAILogo from '../Icons/XAILogo';
+import { useAuth } from '../../context/AuthContext';
 
 const Register = ({ onSwitchToLogin }) => {
   const [formData, setFormData] = useState({
@@ -20,6 +21,7 @@ const Register = ({ onSwitchToLogin }) => {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
 
   const handleChange = (e) => {
     setFormData({
@@ -59,12 +61,8 @@ const Register = ({ onSwitchToLogin }) => {
         throw new Error(data.error || 'Registration failed');
       }
 
-      // Store token and user data
-      localStorage.setItem('token', data.data.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-      
-      // Redirect to dashboard
-      window.location.href = '/dashboard';
+      // Use the login function from AuthContext
+      await login(data.data.user, data.data.token);
     } catch (error) {
       setError(error.message);
     } finally {

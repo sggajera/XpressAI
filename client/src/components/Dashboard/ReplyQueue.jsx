@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import {
   Paper,
   Typography,
@@ -27,14 +28,75 @@ import XIcon from '../Icons/XIcon';
 const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
   const [sending, setSending] = useState(new Set());
   const [sendingAll, setSendingAll] = useState(false);
+  const { getStoredToken } = useAuth();
+
+  const makeAuthenticatedRequest = async (url, options = {}) => {
+    const token = getStoredToken();
+    console.log('Token from AuthContext:', token); // Debug log
+
+    if (!token) {
+      console.error('No token found in AuthContext');
+      throw new Error('No authentication token found');
+    }
+
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    };
+
+    console.log('Request URL:', url); // Debug log
+    console.log('Request headers:', headers); // Debug log
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error('Response error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        }); // Debug log
+        throw new Error(errorData.error || 'Request failed');
+      }
+
+      return response;
+    } catch (error) {
+      console.error('Network error:', error);
+      throw error;
+    }
+  };
 
   const handleSendReply = async (reply) => {
     setSending(prev => new Set([...prev, reply.id]));
     try {
+      console.log('Sending reply:', reply); // Debug log
       // TODO: Implement actual sending
       await new Promise(resolve => setTimeout(resolve, 1000));
+      
       // After successful send, remove from queue and DB
+      const token = getStoredToken();
+      const response = await fetch(`/api/twitter/approved-replies/${reply.tweetId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Error response:', errorData); // Debug log
+        throw new Error('Failed to remove reply from database');
+      }
+
+      // Only call onRemoveReply if the DELETE request was successful
       await onRemoveReply(reply.tweetId);
+    } catch (error) {
+      console.error('Error sending reply:', error);
     } finally {
       setSending(prev => {
         const next = new Set(prev);
@@ -51,7 +113,32 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
     try {
       // Send all replies in sequence
       for (const reply of queuedReplies) {
-        await handleSendReply(reply);
+        try {
+          // TODO: Implement actual sending
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Remove from queue and DB
+          const token = getStoredToken();
+          const response = await fetch(`/api/twitter/approved-replies/${reply.tweetId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            console.error('Error response:', errorData); // Debug log
+            throw new Error('Failed to remove reply from database');
+          }
+
+          await onRemoveReply(reply.tweetId);
+        } catch (error) {
+          console.error(`Error processing reply ${reply.tweetId}:`, error);
+          // Continue with next reply even if one fails
+          continue;
+        }
       }
     } finally {
       setSendingAll(false);

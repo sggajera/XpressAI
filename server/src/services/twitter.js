@@ -5,6 +5,38 @@ const { mockTrackedAccounts, mockUserData, mockTweets } = require('../mock/twitt
 
 // Add environment check
 const USE_MOCK = process.env.USE_MOCK === 'true';
+const RATE_LIMIT_MINUTES = parseInt(process.env.TWITTER_API_RATE_LIMIT_MINUTES) || 15;
+
+// Cache for last API call timestamps
+const apiCallTimestamps = new Map();
+
+// Function to check if enough time has passed since last API call
+const canMakeApiCall = (userId) => {
+  const lastCallTime = apiCallTimestamps.get(userId);
+  if (!lastCallTime) return true;
+
+  const timeSinceLastCall = Date.now() - lastCallTime;
+  const minimumWaitTime = RATE_LIMIT_MINUTES * 60 * 1000; // Convert minutes to milliseconds
+  
+  return timeSinceLastCall >= minimumWaitTime;
+};
+
+// Function to update last API call timestamp
+const updateApiCallTimestamp = (userId) => {
+  apiCallTimestamps.set(userId, Date.now());
+};
+
+// Get remaining time until next API call allowed
+const getTimeUntilNextCall = (userId) => {
+  const lastCallTime = apiCallTimestamps.get(userId);
+  if (!lastCallTime) return 0;
+
+  const timeSinceLastCall = Date.now() - lastCallTime;
+  const minimumWaitTime = RATE_LIMIT_MINUTES * 60 * 1000;
+  const remainingTime = minimumWaitTime - timeSinceLastCall;
+  
+  return Math.max(0, Math.ceil(remainingTime / 60000)); // Return remaining minutes
+};
 
 // Update the Twitter client initialization with better error handling
 const initializeTwitterClient = () => {
@@ -89,135 +121,165 @@ const testConnection = async () => {
   }
 };
 
-const startTracking = async (username) => {
+const startTracking = async (username, userId) => {
   try {
-    if (USE_MOCK) {
-      console.log('Using mock data for start tracking');
-      await new Promise(resolve => setTimeout(resolve, 500)); // Simulate API delay
-      return {
-        success: true,
-        user: mockUserData.data,
-        tweets: mockTweets.data
-      };
+    // Check if we can make API call
+    if (!canMakeApiCall(userId)) {
+      const minutesRemaining = getTimeUntilNextCall(userId);
+      throw new Error(`Rate limit in effect. Please wait ${minutesRemaining} minutes before tracking new accounts.`);
     }
 
-    // Validate Twitter client
-    if (!rwClient) {
-      throw new Error('Twitter client not initialized');
-    }
-
-    // Get user info
-    const user = await rwClient.v2.userByUsername(username, {
-      'user.fields': ['id', 'name', 'username', 'description']
-    }).catch(error => {
-      if (error.code === 401) {
-        throw new Error('Twitter API authentication failed. Please check your credentials.');
-      }
-      throw error;
-    });
-
-    if (!user.data) {
+    // Get user info first
+    const user = await client.v2.userByUsername(username);
+    if (!user) {
       throw new Error('User not found');
     }
 
-    // Add delay to avoid rate limits
-    await new Promise(resolve => setTimeout(resolve, 1000));
-
-    // Get user's tweets
-    const tweets = await rwClient.v2.userTimeline(user.data.id, {
-      exclude: ['retweets', 'replies'],
+    // Get recent tweets
+    const tweets = await client.v2.userTimeline(user.data.id, {
       max_results: 5,
-      'tweet.fields': ['created_at', 'public_metrics']
-    }).catch(error => {
-      console.error('Error fetching tweets:', error);
-      return { data: [] };
+      exclude: ['replies', 'retweets'],
+      'tweet.fields': ['created_at', 'public_metrics', 'text']
     });
 
-    // Store in database
-    await User.findOneAndUpdate(
-      { email: 'test@example.com' },
+    // Update last API call timestamp
+    updateApiCallTimestamp(userId);
+
+    // Store the account and tweets in the database
+    const accountData = {
+      username: user.data.username.toLowerCase(),
+      twitterId: user.data.id,
+      lastChecked: new Date(),
+      keywords: [],
+      tweets: tweets.data || []
+    };
+
+    // Update user's tracked accounts in database
+    await User.findByIdAndUpdate(
+      userId,
       { 
-        $addToSet: {
-          'preferences.trackedAccounts': {
-            username: username,
-            twitterId: user.data.id,
-            lastChecked: new Date().toISOString(),
-            keywords: [],
-            tweets: tweets.data || []
-          }
+        $addToSet: { 
+          'preferences.trackedAccounts': accountData
         }
       },
-      { upsert: true }
+      { new: true }
     );
 
     return {
       success: true,
-      user: user.data,
-      tweets: tweets.data || []
+      user: {
+        username: user.data.username,
+        id: user.data.id,
+        name: user.data.name,
+        description: user.data.description || ''
+      },
+      tweets: {
+        data: tweets.data || []
+      },
+      rateLimit: {
+        active: false,
+        minutesRemaining: RATE_LIMIT_MINUTES
+      }
     };
   } catch (error) {
-    console.error('Twitter API Error:', error);
-    return {
-      success: false,
-      error: error.message || 'Failed to track account',
-      details: error.data || error
-    };
+    console.error('Error in startTracking:', error);
+    throw error;
   }
 };
 
-const getTrackedAccounts = async () => {
+const getTrackedAccounts = async (userId) => {
   try {
     if (USE_MOCK) {
       console.log('Using mock data for tracked accounts');
-      console.log('Mock data:', mockTrackedAccounts); // Add this debug log
       await new Promise(resolve => setTimeout(resolve, 500));
       return { 
         success: true, 
-        data: mockTrackedAccounts.map(account => ({
-          ...account,
-          tweets: account.tweets || [] // Ensure tweets array exists
-        }))
+        data: mockTrackedAccounts
       };
     }
 
-    const user = await User.findOne({ email: 'test@example.com' });
+    // Get user from database
+    const user = await User.findById(userId);
     if (!user?.preferences?.trackedAccounts) {
       return { success: true, data: [] };
     }
 
-    // Ensure trackedAccounts is an array
-    const trackedAccounts = Array.isArray(user.preferences.trackedAccounts) 
-      ? user.preferences.trackedAccounts 
-      : [];
-
-    // Fetch fresh tweets for each account
-    const accounts = await Promise.all(
-      trackedAccounts.map(async (account) => {
-        try {
-          const tweets = await rwClient.v2.userTimeline(account.twitterId, {
-            exclude: ['retweets', 'replies'],
-            max_results: 5,
-            'tweet.fields': ['created_at', 'public_metrics']
-          });
-
-          return {
-            ...account.toObject(),
-            tweets: tweets.data || []
-          };
-        } catch (error) {
-          console.error(`Error fetching tweets for ${account.username}:`, error);
-          return {
-            ...account.toObject(),
-            tweets: []
-          };
+    // Check if we can make API call
+    const canCallApi = canMakeApiCall(userId);
+    
+    // If we can't make API call, return data from database with rate limit info
+    if (!canCallApi) {
+      const minutesRemaining = getTimeUntilNextCall(userId);
+      console.log('Rate limit active, returning cached data from database');
+      return { 
+        success: true, 
+        data: user.preferences.trackedAccounts,
+        fromCache: true,
+        rateLimit: {
+          active: true,
+          minutesRemaining: minutesRemaining
         }
-      })
+      };
+    }
+
+    // If we can make API call, fetch fresh tweets
+    let accountsWithTweets = [];
+    for (const account of user.preferences.trackedAccounts) {
+      try {
+        const tweets = await client.v2.userTimeline(account.twitterId, {
+          max_results: 5,
+          exclude: ['replies', 'retweets'],
+          'tweet.fields': ['created_at', 'public_metrics', 'text']
+        });
+
+        // Prepare the updated account data
+        accountsWithTweets.push({
+          ...account.toObject(),  // Convert Mongoose document to plain object
+          lastChecked: new Date(),
+          tweets: tweets.data || account.tweets || [] // Keep existing tweets if API call fails
+        });
+      } catch (error) {
+        console.error(`Error fetching tweets for ${account.username}:`, error);
+        // On error, use existing account data from database
+        accountsWithTweets.push({
+          ...account.toObject(),  // Convert Mongoose document to plain object
+          tweets: account.tweets || [] // Ensure tweets is always an array
+        });
+      }
+    }
+
+    // Update last API call timestamp
+    updateApiCallTimestamp(userId);
+
+    // Update user's tracked accounts in database with new data
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        'preferences.trackedAccounts': accountsWithTweets
+      },
+      { new: true }
     );
 
-    return { success: true, data: accounts };
+    console.log('Updated tracked accounts in database with fresh tweets');
+
+    return { 
+      success: true, 
+      data: accountsWithTweets,
+      rateLimit: {
+        active: false,
+        minutesRemaining: RATE_LIMIT_MINUTES
+      }
+    };
   } catch (error) {
-    console.error('Database Error:', error);
-    return { success: false, data: [], error: 'Failed to fetch tracked accounts' };
+    console.error('Error in getTrackedAccounts:', error);
+    // If there's an error, return the cached data from database
+    const user = await User.findById(userId);
+    return {
+      success: true,
+      data: user?.preferences?.trackedAccounts || [],
+      fromCache: true,
+      error: error.message
+    };
   }
 };
 
