@@ -111,35 +111,39 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
     
     setSendingAll(true);
     try {
-      // Send all replies in sequence
-      for (const reply of queuedReplies) {
-        try {
-          // TODO: Implement actual sending
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Remove from queue and DB
-          const token = getStoredToken();
-          const response = await fetch(`/api/twitter/approved-replies/${reply.tweetId}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          });
+      // Call the post-all-replies endpoint with the correct URL
+      const response = await makeAuthenticatedRequest('/api/twitter/post-all-replies', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          replies: queuedReplies.map(reply => ({
+            tweetId: reply.tweetId,
+            replyText: reply.replyText,
+            username: reply.username,
+            originalTweet: reply.originalTweet
+          }))
+        })
+      });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            console.error('Error response:', errorData); // Debug log
-            throw new Error('Failed to remove reply from database');
-          }
-
-          await onRemoveReply(reply.tweetId);
-        } catch (error) {
-          console.error(`Error processing reply ${reply.tweetId}:`, error);
-          // Continue with next reply even if one fails
-          continue;
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to post replies');
+      }
+      
+      // Process results and remove successfully posted replies
+      const results = data.data;
+      for (const result of results) {
+        if (result.success) {
+          await onRemoveReply(result.postId);
+        } else {
+          console.error(`Failed to post reply to ${result.postId}:`, result.error);
         }
       }
+    } catch (error) {
+      console.error('Error posting all replies:', error);
     } finally {
       setSendingAll(false);
     }
@@ -191,11 +195,11 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
               size="medium"
               onClick={handleSendAll}
               disabled={sendingAll || queuedReplies.length === 0}
-              startIcon={<SendIcon sx={{ color: '#E8E8E8' }} />}
+              startIcon={<SendIcon sx={{ color: '#CCCCCC' }} />}
               sx={{
                 background: 'linear-gradient(45deg, #000000 30%, #2C2C2C 90%)',
                 boxShadow: '0 3px 8px 2px rgba(0, 0, 0, 0.3)',
-                color: '#E8E8E8',
+                color: '#CCCCCC',
                 minWidth: '120px',
                 height: '40px',
                 borderRadius: '8px',
@@ -214,12 +218,6 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
                   color: 'rgba(255, 255, 255, 0.5)',
                   boxShadow: 'none',
                   border: '1px solid rgba(255, 255, 255, 0.05)',
-                },
-                '& .MuiButton-startIcon': {
-                  marginRight: 1,
-                },
-                '& .MuiSvgIcon-root': {
-                  fontSize: '1.2rem',
                 },
               }}
             >
@@ -306,11 +304,12 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
                           flex: 1,
                           background: 'linear-gradient(45deg, #000000 30%, #2C2C2C 90%)',
                           boxShadow: '0 3px 8px 2px rgba(0, 0, 0, 0.3)',
-                          color: '#E8E8E8',
+                          color: '#CCCCCC',
                           height: '48px',
                           borderRadius: '8px',
                           textTransform: 'none',
                           fontSize: '1rem',
+                          fontWeight: 600,
                           '&:hover': {
                             background: 'linear-gradient(45deg, #1A1A1A 30%, #383838 90%)',
                             boxShadow: '0 4px 10px 3px rgba(0, 0, 0, 0.4)',

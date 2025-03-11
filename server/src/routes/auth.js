@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { User, Context } = require('../models');
 
 // Register
 router.post('/register', async (req, res) => {
@@ -21,16 +21,24 @@ router.post('/register', async (req, res) => {
     const user = new User({
       email,
       password,
-      name,
-      preferences: {
-        trackedAccounts: [],
-        replySettings: {
-          tone: 'professional',
-          autoApprove: false
-        }
-      }
+      name
     });
 
+    await user.save();
+
+    // Create context for the user
+    const context = new Context({
+      user: user._id,
+      tone: 'professional',
+      autoApprove: false,
+      keywords: [],
+      userGeneralContext: ''
+    });
+
+    await context.save();
+
+    // Update user with context reference
+    user.context = context._id;
     await user.save();
 
     // Generate token
@@ -45,7 +53,7 @@ router.post('/register', async (req, res) => {
       id: user._id,
       email: user.email,
       name: user.name,
-      preferences: user.preferences,
+      context: context,
       createdAt: user.createdAt
     };
 
@@ -70,8 +78,11 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email });
+    // Find user and populate context
+    const user = await User.findOne({ email })
+      .populate('context')
+      .populate('trackedAccounts');
+      
     if (!user) {
       return res.status(401).json({ 
         success: false, 
@@ -100,7 +111,8 @@ router.post('/login', async (req, res) => {
       id: user._id,
       email: user.email,
       name: user.name,
-      preferences: user.preferences,
+      context: user.context,
+      trackedAccounts: user.trackedAccounts,
       createdAt: user.createdAt
     };
 

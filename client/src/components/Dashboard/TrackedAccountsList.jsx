@@ -64,25 +64,21 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
   const handleAccountClick = async (account) => {
     setSelectedAccount(selectedAccount?.username === account.username ? null : account);
     
-    // Generate replies for all tweets that don't have suggestions yet
-    const tweetsArray = Array.isArray(account.tweets) 
-      ? account.tweets 
-      : Array.isArray(account.tweets?.data) 
-        ? account.tweets.data 
-        : [];
+    // Generate replies for all posts that don't have suggestions yet
+    const postsArray = Array.isArray(account.posts) ? account.posts : [];
 
-    if (tweetsArray.length > 0) {
-      const tweetsWithoutSuggestions = tweetsArray.filter(tweet => !suggestions[tweet.id]);
-      await Promise.all(tweetsWithoutSuggestions.map(tweet => generateReply(tweet)));
+    if (postsArray.length > 0) {
+      const postsWithoutSuggestions = postsArray.filter(post => !suggestions[post.id]);
+      await Promise.all(postsWithoutSuggestions.map(post => generateReply(post)));
     }
   };
 
-  const generateReply = async (tweet) => {
+  const generateReply = async (post) => {
     try {
       // Show loading state while generating
       setSuggestions(prev => ({
         ...prev,
-        [tweet.id]: 'Generating suggestion...'
+        [post.id]: 'Generating suggestion...'
       }));
 
       const token = getStoredToken();
@@ -93,7 +89,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ 
-          tweet: tweet.text,
+          tweet: post.text,
           context: context || 'Be professional and friendly'
         }),
       });
@@ -101,30 +97,30 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
       const data = await response.json();
       setSuggestions(prev => ({
         ...prev,
-        [tweet.id]: data.reply
+        [post.id]: data.reply
       }));
     } catch (error) {
       console.error('Error generating reply:', error);
       setSuggestions(prev => ({
         ...prev,
-        [tweet.id]: 'Failed to generate reply'
+        [post.id]: 'Failed to generate reply'
       }));
     }
   };
 
-  const handleApproveReply = async (tweet, reply) => {
+  const handleApproveReply = async (post, reply) => {
     try {
       // Check if already approved to prevent duplicate
-      if (approvedReplies.has(tweet.id)) {
+      if (approvedReplies.has(post.id)) {
         return;
       }
 
       // Add to queue through parent component - this will also handle updating approvedReplies
       onAddToQueue({
         username: selectedAccount.username,
-        originalTweet: tweet.text,
+        originalTweet: post.text,
         replyText: reply,
-        tweetId: tweet.id,
+        tweetId: post.id,
         queuedAt: new Date().toISOString(),
       });
 
@@ -135,11 +131,11 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
     }
   };
 
-  const handleUnapprove = async (tweet) => {
+  const handleUnapprove = async (post) => {
     try {
       // Remove from DB first
       const token = getStoredToken();
-      const response = await fetch(`/api/twitter/approved-replies/${tweet.id}`, {
+      const response = await fetch(`/api/twitter/approved-replies/${post.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -153,25 +149,25 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
       
       // Remove from queue - ensure we're passing the correct ID structure
       if (onRemoveFromQueue) {
-        console.log('Unapproving tweet with ID:', tweet.id);
-        onRemoveFromQueue(tweet.id);
+        console.log('Unapproving tweet with ID:', post.id);
+        onRemoveFromQueue(post.id);
       }
 
       // Put the message back in the suggested reply
       setSuggestions(prev => ({
         ...prev,
-        [tweet.id]: prev[tweet.id] || 'No suggestion available' // Restore the suggestion
+        [post.id]: prev[post.id] || 'No suggestion available' // Restore the suggestion
       }));
     } catch (error) {
       console.error('Error removing approved reply:', error);
     }
   };
 
-  const handleAIEditClick = (event, tweet) => {
+  const handleAIEditClick = (event, post) => {
     setAnchorEl(anchorEl ? null : event.currentTarget);
     setEditingContext(true);
     setContext('');
-    setCurrentTweet(tweet);
+    setCurrentTweet(post);
   };
 
   const handleSaveEditedReply = (tweetId, newReplyText) => {
@@ -213,15 +209,18 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
         overflow: 'auto' // Enable scrolling
       }}
     >
-      <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <XIcon color="primary" />
+      <Typography variant="h6" sx={{ fontWeight: 600 }}>
         Tracked Accounts
       </Typography>
 
       {loading ? (
-        <Typography color="text.secondary">Loading accounts...</Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 600 }}>
+          Loading tracked accounts...
+        </Typography>
       ) : !Array.isArray(accounts) || accounts.length === 0 ? (
-        <Typography color="text.secondary">No accounts tracked yet</Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ fontWeight: 600 }}>
+          No accounts being tracked
+        </Typography>
       ) : (
         <List>
           {accounts.map((account) => (
@@ -257,15 +256,11 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
               <Collapse in={selectedAccount?.username === account.username} timeout="auto" unmountOnExit>
                 <Box sx={{ pl: 4, pr: 2, pb: 2 }}>
                   {(() => {
-                    // Ensure tweets is an array
-                    const tweetsArray = Array.isArray(account.tweets) 
-                      ? account.tweets 
-                      : Array.isArray(account.tweets?.data) 
-                        ? account.tweets.data 
-                        : [];
+                    // Ensure posts is an array
+                    const postsArray = Array.isArray(account.posts) ? account.posts : [];
                     
-                    return tweetsArray.map((tweet) => (
-                      <Grid container spacing={2} key={tweet.id} sx={{ mb: 3 }}>
+                    return postsArray.map((post) => (
+                      <Grid container spacing={2} key={post.id} sx={{ mb: 3 }}>
                         {/* Original Tweet - smaller */}
                         <Grid item xs={12} md={5}>
                           <Paper 
@@ -284,7 +279,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                             {/* Title Bar */}
                             <Box sx={{
                               p: 1.5,
-                              bgcolor: 'grey.50',
+                              bgcolor: 'background.paperLight',
                               borderBottom: '1px solid',
                               borderColor: 'divider',
                               display: 'flex',
@@ -298,14 +293,14 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                 gap: 1,
                               }}>
                                 <XIcon fontSize="small" color="action" />
-                                <Typography variant="subtitle2" color="text.secondary">
+                                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
                                   Original Tweet
                                 </Typography>
                               </Box>
                               
                               {/* Right side with link */}
                               <Link
-                                href={`https://twitter.com/${tweet.username}/status/${tweet.id}`}
+                                href={`https://twitter.com/${post.username}/status/${post.id}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 sx={{
@@ -335,8 +330,8 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                             }}>
                               {/* Username header */}
                               <Box sx={{ mb: 1.5 }}>
-                                <Typography variant="subtitle2">
-                                  {tweet.username}
+                                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                  {post.username}
                                 </Typography>
                               </Box>
                               
@@ -356,7 +351,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                   lineHeight: 1.5,
                                 }}
                               >
-                                {tweet.text}
+                                {post.text}
                               </Typography>
                             </Box>
 
@@ -365,7 +360,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                               mt: 'auto',
                               borderTop: '1px solid',
                               borderColor: 'divider',
-                              bgcolor: 'grey.50',
+                              bgcolor: 'background.paperLight',
                               height: '52px',
                             }}>
                               {/* For Original Tweet metrics */}
@@ -377,14 +372,14 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                 width: '100%',
                                 height: '100%',
                               }}>
-                                <Typography variant="caption" color="text.secondary">
-                                  ♥ {tweet.public_metrics?.like_count || 0}
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                  ♥ {post.public_metrics?.likeCount || 0}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  ↺ {tweet.public_metrics?.retweet_count || 0}
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                  ↺ {post.public_metrics?.retweetCount || 0}
                                 </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                  💬 {tweet.public_metrics?.reply_count || 0}
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                  💬 {post.public_metrics?.replyCount || 0}
                                 </Typography>
                               </Box>
                             </Box>
@@ -409,7 +404,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                             {/* Title Bar */}
                             <Box sx={{
                               p: 1.5,
-                              bgcolor: 'grey.50',
+                              bgcolor: 'background.paperLight',
                               borderBottom: '1px solid',
                               borderColor: 'divider',
                               display: 'flex',
@@ -417,7 +412,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                               gap: 1,
                             }}>
                               <XIcon fontSize="small" color="action" />
-                              <Typography variant="subtitle2" color="text.secondary">
+                              <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
                                 Suggested Reply
                               </Typography>
                             </Box>
@@ -426,15 +421,17 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                             <Box sx={{ 
                               p: 2,
                               flex: 1,
-                            }} data-tweet-id={tweet.id}>
-                              {editingReply === tweet.id ? (
+                              display: 'flex',
+                              flexDirection: 'column',
+                            }}>
+                              {editingReply === post.id ? (
                                 <TextField
                                   fullWidth
                                   multiline
                                   rows={4}
-                                  defaultValue={suggestions[tweet.id]}
+                                  defaultValue={suggestions[post.id]}
                                   placeholder="Edit reply..."
-                                  onBlur={(e) => handleSaveEditedReply(tweet.id, e.target.value)}
+                                  onBlur={(e) => handleSaveEditedReply(post.id, e.target.value)}
                                 />
                               ) : (
                                 <Typography 
@@ -447,7 +444,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                     lineHeight: 1.5,
                                   }}
                                 >
-                                  {suggestions[tweet.id] || 'Generating suggestion...'}
+                                  {suggestions[post.id] || 'Generating suggestion...'}
                                 </Typography>
                               )}
                             </Box>
@@ -457,7 +454,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                               mt: 'auto',
                               borderTop: '1px solid',
                               borderColor: 'divider',
-                              bgcolor: 'grey.50',
+                              bgcolor: 'background.paperLight',
                               height: '52px',
                             }}>
                               {/* For Suggested Reply buttons */}
@@ -474,12 +471,17 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                   <Button
                                     size="small"
                                     startIcon={<AIIcon sx={{ fontSize: 18 }} />}
-                                    onClick={(e) => handleAIEditClick(e, tweet)}
-                                    disabled={approvedReplies.has(tweet.id)}
+                                    onClick={(e) => handleAIEditClick(e, post)}
+                                    disabled={approvedReplies.has(post.id)}
                                     sx={{ 
                                       minWidth: 'auto',
                                       py: 0.5,
                                       fontSize: '0.75rem',
+                                      color: 'text.primary',
+                                      fontWeight: 600,
+                                      '&.Mui-disabled': {
+                                        color: 'text.disabled'
+                                      }
                                     }}
                                   >
                                     Edit with AI
@@ -487,18 +489,18 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                 </Box>
 
                                 {/* Middle - Approve/Approved button */}
-                                {!approvedReplies.has(tweet.id) ? (
+                                {!approvedReplies.has(post.id) ? (
                                   <Button
                                     variant="contained"
                                     color="primary"
                                     size="small"
                                     startIcon={<CheckIcon sx={{ fontSize: 18 }} />}
-                                    onClick={() => handleApproveReply(tweet, suggestions[tweet.id])}
+                                    onClick={() => handleApproveReply(post, suggestions[post.id])}
                                     disabled={
-                                      !suggestions[tweet.id] || 
-                                      suggestions[tweet.id] === 'Generating suggestion...' ||
-                                      editingReply === tweet.id ||
-                                      (Boolean(anchorEl) && editingContext && currentTweet?.id === tweet.id)
+                                      !suggestions[post.id] || 
+                                      suggestions[post.id] === 'Generating suggestion...' ||
+                                      editingReply === post.id ||
+                                      (Boolean(anchorEl) && editingContext && currentTweet?.id === post.id)
                                     }
                                     sx={{ 
                                       minWidth: '110px',
@@ -507,33 +509,37 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                       fontSize: '0.75rem',
                                       borderRadius: '4px',
                                       textTransform: 'none',
+                                      fontWeight: 600,
+                                      color: '#CCCCCC',
                                       '&.Mui-disabled': {
                                         bgcolor: 'rgba(0, 0, 0, 0.12)',
                                         color: 'rgba(0, 0, 0, 0.26)',
                                       }
                                     }}
                                   >
-                                    {suggestions[tweet.id] === 'Generating suggestion...' ? 'Generating...' : 'Approve'}
+                                    {suggestions[post.id] === 'Generating suggestion...' ? 'Generating...' : 'Approve'}
                                   </Button>
                                 ) : (
                                   <Chip
                                     label="Approved"
                                     color="success"
                                     size="small"
-                                    onClick={() => handleUnapprove(tweet)}
-                                    onDelete={() => handleUnapprove(tweet)}
+                                    onClick={() => handleUnapprove(post)}
+                                    onDelete={() => handleUnapprove(post)}
                                     sx={{
                                       minWidth: '110px',
                                       height: '32px',
                                       fontSize: '0.75rem',
                                       borderRadius: '4px',
                                       cursor: 'pointer',
+                                      fontWeight: 600,
                                       '&:hover': {
                                         bgcolor: 'error.lighter',
                                         color: 'error.main',
                                       },
                                       '& .MuiChip-label': {
                                         px: 2,
+                                        fontWeight: 600,
                                       },
                                       '& .MuiChip-deleteIcon': {
                                         color: 'inherit',
@@ -547,14 +553,14 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
 
                                 {/* Right side - Edit Text button or Save button */}
                                 <Box sx={{ width: '120px', display: 'flex', justifyContent: 'flex-end' }}>
-                                  {editingReply === tweet.id ? (
+                                  {editingReply === post.id ? (
                                     <Button
                                       size="small"
                                       startIcon={<CheckIcon sx={{ fontSize: 18 }} />}
                                       onClick={() => {
-                                        const textField = document.querySelector(`[data-tweet-id="${tweet.id}"] textarea`);
+                                        const textField = document.querySelector(`[data-tweet-id="${post.id}"] textarea`);
                                         if (textField) {
-                                          handleSaveEditedReply(tweet.id, textField.value);
+                                          handleSaveEditedReply(post.id, textField.value);
                                         }
                                       }}
                                       sx={{ 
@@ -569,12 +575,17 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                     <Button
                                       size="small"
                                       startIcon={<EditIcon sx={{ fontSize: 18 }} />}
-                                      onClick={() => setEditingReply(editingReply === tweet.id ? null : tweet.id)}
-                                      disabled={approvedReplies.has(tweet.id)}
+                                      onClick={() => setEditingReply(editingReply === post.id ? null : post.id)}
+                                      disabled={approvedReplies.has(post.id)}
                                       sx={{ 
                                         minWidth: 'auto',
                                         py: 0.5,
                                         fontSize: '0.75rem',
+                                        color: 'text.primary',
+                                        fontWeight: 600,
+                                        '&.Mui-disabled': {
+                                          color: 'text.disabled'
+                                        }
                                       }}
                                     >
                                       Edit Text
@@ -616,8 +627,11 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                   borderColor: 'divider',
                                 }}
                               >
-                                <Typography variant="subtitle2" gutterBottom>
-                                  Update AI Context
+                                <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                  AI Context
+                                </Typography>
+                                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                                  Enter instructions for AI to generate a new reply
                                 </Typography>
                                 <TextField
                                   fullWidth

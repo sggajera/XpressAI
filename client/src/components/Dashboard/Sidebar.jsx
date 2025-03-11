@@ -10,6 +10,7 @@ import {
   Box,
   Divider,
   Typography,
+  Switch,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -21,14 +22,17 @@ import {
   Help as HelpIcon,
   Logout as LogoutIcon,
   Schedule as ScheduleIcon,
+  DarkMode as DarkModeIcon,
 } from '@mui/icons-material';
 import theme from '../../theme';
 import { useAuth } from '../../context/AuthContext';
+import { useTheme } from '../../context/ThemeContext';
 
 const Sidebar = () => {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { mode, toggleTheme } = useTheme();
 
   const handleLogout = () => {
     logout();
@@ -114,7 +118,7 @@ const Sidebar = () => {
                   borderRadius: 1,
                   mb: 0.5,
                   '&:hover': {
-                    bgcolor: 'menu.hover',
+                    bgcolor: 'action.hover',
                   }
                 }}
               >
@@ -127,6 +131,31 @@ const Sidebar = () => {
                 <ListItemText primary={item.title} />
               </ListItem>
             ))}
+
+            <ListItem 
+              button 
+              onClick={toggleTheme}
+              sx={{
+                borderRadius: 1,
+                mb: 0.5,
+                '&:hover': {
+                  bgcolor: 'action.hover',
+                }
+              }}
+            >
+              <ListItemIcon sx={{ 
+                minWidth: 40,
+                color: 'primary.main' 
+              }}>
+                <DarkModeIcon />
+              </ListItemIcon>
+              <ListItemText primary="Dark Mode" />
+              <Switch 
+                checked={mode === 'dark'}
+                onChange={toggleTheme}
+                color="primary"
+              />
+            </ListItem>
 
             <Divider sx={{ my: 2 }} />
 

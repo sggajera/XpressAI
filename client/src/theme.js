@@ -1,7 +1,8 @@
 import { createTheme } from '@mui/material/styles';
 
-const theme = createTheme({
+const getTheme = (mode) => createTheme({
   palette: {
+    mode,
     primary: {
       main: '#000000', // Black
       light: '#2C2C2C',
@@ -15,12 +16,14 @@ const theme = createTheme({
       contrastText: '#fff',
     },
     background: {
-      default: '#F5F7FA',
-      paper: '#FFFFFF',
+      default: mode === 'dark' ? '#121212' : '#F5F7FA',
+      paper: mode === 'dark' ? '#1E1E1E' : '#FFFFFF',
+      paperLight: mode === 'dark' ? '#2A2A2A' : '#FFFFFF',
+      paperLighter: mode === 'dark' ? '#252525' : '#FFFFFF',
     },
     text: {
-      primary: '#2C3E50',
-      secondary: '#34495E',
+      primary: mode === 'dark' ? '#E0E0E0' : '#2C3E50',
+      secondary: mode === 'dark' ? '#A0A0A0' : '#34495E',
     },
   },
   components: {
@@ -28,7 +31,9 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 12,
-          boxShadow: '0 2px 16px rgba(0,0,0,0.08)',
+          boxShadow: mode === 'dark' 
+            ? '0 2px 16px rgba(0,0,0,0.3)'
+            : '0 2px 16px rgba(0,0,0,0.08)',
         },
       },
     },
@@ -47,7 +52,14 @@ const theme = createTheme({
         },
       },
     },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
+        },
+      },
+    },
   },
 });
 
-export default theme; 
+export default getTheme; 

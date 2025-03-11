@@ -2,23 +2,33 @@
 const mockTweets = {
   data: [
     {
-      id: '1',
-      text: 'Just had a great meeting about Tesla Autopilot progress',
-      username: 'elonmusk',
+      id: 'tweet1',
+      text: 'Just launched our new AI product! Check it out at https://example.com #AI #Tech',
+      created_at: new Date(Date.now() - 3600000).toISOString(), // 1 hour ago
       public_metrics: {
-        like_count: 50000,
-        retweet_count: 5000,
-        reply_count: 3000
+        like_count: 100,
+        retweet_count: 50,
+        reply_count: 25
       }
     },
     {
-      id: '2',
-      text: 'SpaceX Starship update coming soon',
-      username: 'elonmusk',
+      id: 'tweet2',
+      text: 'Looking for feedback on our latest feature. What do you think about the new UI? #UX #ProductDevelopment',
+      created_at: new Date(Date.now() - 7200000).toISOString(), // 2 hours ago
       public_metrics: {
-        like_count: 75000,
-        retweet_count: 8000,
-        reply_count: 4500
+        like_count: 200,
+        retweet_count: 75,
+        reply_count: 30
+      }
+    },
+    {
+      id: 'tweet3',
+      text: 'Excited to announce we\'re hiring! Looking for talented developers to join our team. #Hiring #TechJobs',
+      created_at: new Date(Date.now() - 10800000).toISOString(), // 3 hours ago
+      public_metrics: {
+        like_count: 150,
+        retweet_count: 60,
+        reply_count: 20
       }
     }
   ]
@@ -26,117 +36,38 @@ const mockTweets = {
 
 const mockUserData = {
   data: {
-    id: '44196397',
-    name: 'Elon Musk',
-    username: 'elonmusk',
-    description: 'Owner of X'
+    id: 'mock_user_id',
+    name: 'Tech Company',
+    username: 'techcompany',
+    description: 'Leading innovation in AI and technology solutions'
   }
 };
 
 // Now define mockTrackedAccounts using the mockTweets data
 const mockTrackedAccounts = [
   {
-    username: 'elonmusk',
-    twitterId: '44196397',
+    _id: 'mock_account_1',
+    username: 'techcompany',
+    twitterId: 'mock_id_1',
     lastChecked: new Date().toISOString(),
-    keywords: ['Tesla', 'SpaceX'],
-    tweets: mockTweets.data
+    keywords: ['AI', 'technology', 'innovation'],
+    tweets: mockTweets.data,
+    callCount: 15,
+    user: 'mock_user_id'
   },
   {
-    username: 'BillGates',
-    twitterId: '50393960',
+    _id: 'mock_account_2',
+    username: 'competitor',
+    twitterId: 'mock_id_2',
     lastChecked: new Date().toISOString(),
-    keywords: ['climate', 'health', 'technology'],
-    tweets: [
-      {
-        id: '4',
-        text: 'Climate change remains our biggest challenge. We need to act now and invest in clean energy solutions.',
-        created_at: '2024-01-20T09:00:00.000Z',
-        public_metrics: {
-          retweet_count: 3000,
-          reply_count: 1500,
-          like_count: 30000
-        }
-      },
-      {
-        id: '5',
-        text: 'Just finished reading a fascinating book about AI and its potential impact on healthcare.',
-        created_at: '2024-01-19T14:20:00.000Z',
-        public_metrics: {
-          retweet_count: 2500,
-          reply_count: 1200,
-          like_count: 28000
-        }
-      }
-    ]
-  },
-  {
-    username: 'sundarpichai',
-    twitterId: '14140253',
-    lastChecked: new Date(),
-    isActive: true,
-    keywords: ['google', 'ai', 'technology'],
-    tweets: [
-      {
-        id: '6',
-        text: 'Excited to announce our latest AI breakthrough at Google. This will transform how we interact with technology.',
-        created_at: '2024-01-20T08:30:00.000Z',
-        public_metrics: {
-          retweet_count: 2800,
-          reply_count: 1300,
-          like_count: 25000
-        }
-      },
-      {
-        id: '7',
-        text: "Proud of our team's work on making technology more accessible to everyone around the world.",
-        created_at: '2024-01-19T16:45:00.000Z',
-        public_metrics: {
-          retweet_count: 2200,
-          reply_count: 1000,
-          like_count: 20000
-        }
-      }
-    ]
-  },
-  {
-    username: 'satyanadella',
-    twitterId: '20571756',
-    lastChecked: new Date(),
-    isActive: true,
-    keywords: ['microsoft', 'cloud', 'ai'],
-    tweets: [
-      {
-        id: '8',
-        text: 'The cloud is transforming every industry. Excited to see how our customers are innovating with Azure.',
-        created_at: '2024-01-20T11:15:00.000Z',
-        public_metrics: {
-          retweet_count: 1800,
-          reply_count: 800,
-          like_count: 15000
-        }
-      },
-      {
-        id: '9',
-        text: 'AI and mixed reality are creating new possibilities for collaboration and creativity.',
-        created_at: '2024-01-19T13:30:00.000Z',
-        public_metrics: {
-          retweet_count: 2100,
-          reply_count: 900,
-          like_count: 18000
-        }
-      },
-      {
-        id: '10',
-        text: 'Sustainability is core to our mission. Proud to announce new initiatives to reduce our carbon footprint.',
-        created_at: '2024-01-18T09:45:00.000Z',
-        public_metrics: {
-          retweet_count: 1500,
-          reply_count: 700,
-          like_count: 12000
-        }
-      }
-    ]
+    keywords: ['tech', 'startup', 'AI'],
+    tweets: mockTweets.data.map(tweet => ({
+      ...tweet,
+      id: `competitor_${tweet.id}`,
+      text: tweet.text.replace('our', 'their')
+    })),
+    callCount: 8,
+    user: 'mock_user_id'
   }
 ];
 

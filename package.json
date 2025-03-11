@@ -4,6 +4,8 @@
     "scripts": {
         "start": "node server/src/index.js",
         "dev": "nodemon server/src/index.js",
+        "debug": "node --inspect server/src/index.js",
+        "debug:break": "node --inspect-brk server/src/index.js",
         "client": "cd client && npm start",
         "dev:full": "concurrently \"npm run dev\" \"npm run client\"",
         "build": "cd client && npm run build"
