@@ -13,7 +13,8 @@
     "twitter-api-v2": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.0",
-    "openai": "^4.0.0"
+    "openai": "^4.0.0",
+    "express-session": "^1.17.3"
   },
   "devDependencies": {
     "nodemon": "^2.0.22"

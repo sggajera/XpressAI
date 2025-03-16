@@ -1,6 +1,31 @@
 import { createTheme } from '@mui/material/styles';
 
+// Import Google Fonts - adding a modern sans-serif font
 const getTheme = (mode) => createTheme({
+  typography: {
+    fontFamily: '"Poppins", "Roboto", "Helvetica", "Arial", sans-serif',
+    h1: {
+      fontWeight: 600,
+    },
+    h2: {
+      fontWeight: 600,
+    },
+    h3: {
+      fontWeight: 600,
+    },
+    h4: {
+      fontWeight: 600,
+    },
+    h5: {
+      fontWeight: 600,
+    },
+    h6: {
+      fontWeight: 600,
+    },
+    button: {
+      fontWeight: 500,
+    },
+  },
   palette: {
     mode,
     primary: {
@@ -56,6 +81,22 @@ const getTheme = (mode) => createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
+        },
+      },
+    },
+    // Prevent SVG icons from being inverted in dark mode
+    MuiSvgIcon: {
+      styleOverrides: {
+        root: {
+          filter: 'none !important', // Prevent automatic filtering
+        },
+      },
+    },
+    // Prevent images from being inverted in dark mode
+    MuiAvatar: {
+      styleOverrides: {
+        img: {
+          filter: 'none !important', // Prevent automatic filtering
         },
       },
     },

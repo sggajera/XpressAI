@@ -1,20 +1,27 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Container,
   Grid,
   Typography,
-  AppBar,
-  Toolbar,
-  Chip,
+  Button,
+  keyframes,
 } from '@mui/material';
+import Psychology from '@mui/icons-material/Psychology';
 import AccountTracker from './AccountTracker';
 import TrackedAccountsList from './TrackedAccountsList';
 import ReplyQueue from './ReplyQueue';
-import XIcon from '../Icons/XIcon';
-import Sidebar from './Sidebar';
-import theme from '../../theme';
+import MainLayout from '../Layout/MainLayout';
 import { useAuth } from '../../context/AuthContext';
+import PostAsUser from './PostAsUser';
+
+// Add keyframes for the blinking animation
+const blinkAnimation = keyframes`
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+`;
 
 const Dashboard = () => {
   const [queuedReplies, setQueuedReplies] = useState([]);
@@ -24,6 +31,7 @@ const Dashboard = () => {
   const [rateLimitInfo, setRateLimitInfo] = useState(null);
   const initialFetchRef = useRef(false);
   const { getStoredToken } = useAuth();
+  const navigate = useNavigate();
 
   const fetchAccounts = async () => {
     try {
@@ -198,94 +206,123 @@ const Dashboard = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <Typography>Loading...</Typography>
-      </Box>
+      <MainLayout title="Xpress AI">
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <Typography>Loading...</Typography>
+        </Box>
+      </MainLayout>
     );
   }
 
-  return (
-    <Box sx={{ flexGrow: 1 }}>
-      <AppBar 
-        position="static" 
-        elevation={0}
-        sx={{
-          background: 'linear-gradient(45deg, #000000 30%, #2C2C2C 90%)',
-          height: '64px',
-        }}
-      >
-        <Toolbar 
+  const actionButton = (
+    <Button
+      variant="contained"
+      onClick={() => navigate('/ideas')}
+      startIcon={
+        <Psychology 
           sx={{ 
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-          }}
-        >
-          <Sidebar />
-          <Typography 
-            variant="h5" 
-            component="div" 
-            sx={{ 
-              fontWeight: 600,
-              letterSpacing: '1px',
-              color: '#E8E8E8',
-              textShadow: '0 2px 4px rgba(0,0,0,0.2)',
-              textTransform: 'uppercase',
-              ml: 1,
-            }}
-          >
-            Xpress AI
-          </Typography>
-          {rateLimitInfo && rateLimitInfo.active && (
-            <Chip
-              label={`Rate limited - ${rateLimitInfo.minutesRemaining} mins remaining`}
-              color="warning"
-              size="small"
-              sx={{ ml: 'auto' }}
-            />
-          )}
-        </Toolbar>
-      </AppBar>
+            fontSize: '1.4rem',
+            filter: 'drop-shadow(0 2px 2px rgba(0,0,0,0.2))'
+          }} 
+        />
+      }
+      sx={{
+        background: 'linear-gradient(45deg, #004C8C 30%, #003A6C 90%)',
+        boxShadow: '0 3px 8px 2px rgba(0, 76, 140, 0.3)',
+        color: '#FFFFFF',
+        height: '40px',
+        minWidth: '120px',
+        maxWidth: '120px',
+        borderRadius: '8px',
+        textTransform: 'none',
+        fontSize: '0.95rem',
+        fontWeight: 600,
+        letterSpacing: '0.5px',
+        border: '1px solid rgba(255,255,255,0.15)',
+        position: 'relative',
+        overflow: 'hidden',
+        animation: `${blinkAnimation} 3s ease-in-out infinite`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '6px 16px',
+        '&:before': {
+          content: '""',
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '50%',
+          background: 'linear-gradient(180deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0) 100%)',
+          borderRadius: '7px 7px 0 0',
+        },
+        '&:hover': {
+          background: 'linear-gradient(45deg, #003A6C 30%, #002D54 90%)',
+          boxShadow: '0 4px 10px 3px rgba(0, 76, 140, 0.4)',
+          animation: 'none',
+          opacity: 1,
+          '&:before': {
+            opacity: 0.8,
+          },
+        },
+        '&:active': {
+          background: 'linear-gradient(45deg, #002D54 30%, #003A6C 90%)',
+          boxShadow: 'inset 0 2px 4px rgba(0, 0, 0, 0.3)',
+          animation: 'none',
+          opacity: 1,
+        },
+      }}
+    >
+      Ideas!
+    </Button>
+  );
 
-      <Container maxWidth="xl" sx={{ 
-        mt: 4, 
-        mb: 4,
-        bgcolor: 'background.default',
-        borderRadius: 2,
-        p: 3,
-      }}>
+  return (
+    <MainLayout actionButton={actionButton} rateLimitInfo={rateLimitInfo}>
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
         <Grid container spacing={3}>
-          {/* Top Row - Account Tracker */}
+          {/* Account Tracker */}
           <Grid item xs={12}>
             <AccountTracker onAccountAdded={fetchAccounts} />
           </Grid>
-
+          
           {/* Main Content */}
-          <Grid container item spacing={3}>
-            {/* Tracked Accounts List */}
-            <Grid item xs={12} md={9}>
-              <TrackedAccountsList 
-                onAddToQueue={handleAddToQueue} 
-                onRemoveFromQueue={handleRemoveFromQueue}
-                approvedReplies={approvedReplies}
-                queuedReplies={queuedReplies}
-                accounts={accounts}
-                loading={loading}
-              />
+          <Grid item xs={12} md={8}>
+            <Grid container spacing={3}>
+              {/* Tracked Accounts */}
+              <Grid item xs={12}>
+                <TrackedAccountsList 
+                  accounts={accounts}
+                  loading={loading}
+                  onAddToQueue={handleAddToQueue}
+                  onRemoveFromQueue={handleRemoveFromQueue}
+                  approvedReplies={approvedReplies}
+                  queuedReplies={queuedReplies}
+                />
+              </Grid>
             </Grid>
-
-            {/* Reply Queue - Always visible */}
-            <Grid item xs={12} md={3}>
-              <ReplyQueue 
-                queuedReplies={queuedReplies}
-                onRemoveReply={handleRemoveFromQueue}
-              />
+          </Grid>
+          
+          {/* Sidebar */}
+          <Grid item xs={12} md={4}>
+            <Grid container spacing={3}>
+              {/* Reply Queue */}
+              <Grid item xs={12}>
+                <ReplyQueue 
+                  queuedReplies={queuedReplies} 
+                  onRemoveReply={handleRemoveFromQueue}
+                />
+              </Grid>
+              
+              {/* Post as User */}
+              <Grid item xs={12}>
+                <PostAsUser />
+              </Grid>
             </Grid>
           </Grid>
         </Grid>
       </Container>
-    </Box>
+    </MainLayout>
   );
 };
 

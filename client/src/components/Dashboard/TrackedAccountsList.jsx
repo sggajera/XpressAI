@@ -22,7 +22,8 @@ import {
   Popper,
   Paper as PopperPaper,
   ClickAwayListener,
-  Link
+  Link,
+  useTheme
 } from '@mui/material';
 import { 
   ExpandMore, 
@@ -48,6 +49,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
   const popperRef = useRef(null);
   const [currentTweet, setCurrentTweet] = useState(null);
   const { getStoredToken } = useAuth();
+  const theme = useTheme();
 
   // Initialize suggestions when queuedReplies changes
   useEffect(() => {
@@ -69,12 +71,46 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
 
     if (postsArray.length > 0) {
       const postsWithoutSuggestions = postsArray.filter(post => !suggestions[post.id]);
-      await Promise.all(postsWithoutSuggestions.map(post => generateReply(post)));
+      await Promise.all(postsWithoutSuggestions.map(post => generateReply(post, false)));
     }
   };
 
-  const generateReply = async (post) => {
+  const generateReply = async (post, forceRegenerate = false) => {
     try {
+      // Check if this post already has a reply stored in the database
+      // and we're not forcing regeneration
+      if (!forceRegenerate) {
+        // First check if we already have a suggestion locally
+        if (suggestions[post.id] && suggestions[post.id] !== 'Generating suggestion...' && 
+            suggestions[post.id] !== 'Failed to generate reply') {
+          console.log('Using existing suggestion for post:', post.id);
+          return;
+        }
+        
+        // Then check if the post has a reply in the database
+        const token = getStoredToken();
+        const checkResponse = await fetch(`/api/twitter/post-reply/${post.id}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        if (checkResponse.ok) {
+          const data = await checkResponse.json();
+          if (data.success && data.data && data.data.reply && data.data.reply.replyText) {
+            // Use the existing reply from the database
+            setSuggestions(prev => ({
+              ...prev,
+              [post.id]: data.data.reply.replyText
+            }));
+            console.log('Using existing reply from database for post:', post.id);
+            return;
+          }
+        }
+      }
+      
       // Show loading state while generating
       setSuggestions(prev => ({
         ...prev,
@@ -95,6 +131,27 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
       });
 
       const data = await response.json();
+      
+      // Store the generated reply in the Post object
+      if (data.reply) {
+        const storeResponse = await fetch('/api/twitter/store-reply', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            postId: post.id,
+            replyText: data.reply,
+            forceUpdate: forceRegenerate
+          })
+        });
+        
+        if (!storeResponse.ok) {
+          console.error('Failed to store reply in Post object:', await storeResponse.json());
+        }
+      }
+      
       setSuggestions(prev => ({
         ...prev,
         [post.id]: data.reply
@@ -115,7 +172,48 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
         return;
       }
 
-      // Add to queue through parent component - this will also handle updating approvedReplies
+      const token = getStoredToken();
+      
+      // First, ensure the reply is stored in the Post object
+      const storeResponse = await fetch('/api/twitter/store-reply', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          postId: post.id,
+          replyText: reply,
+          forceUpdate: true // Always update when approving
+        })
+      });
+      
+      if (!storeResponse.ok) {
+        throw new Error('Failed to store reply in Post object');
+      }
+      
+      // Then, add to queue through the approved-replies endpoint
+      const queueResponse = await fetch('/api/twitter/approved-replies', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tweetId: post.id,
+          reply: {
+            replyText: reply,
+            tone: context || 'professional',
+            userGeneralContext: context || '',
+          }
+        })
+      });
+      
+      if (!queueResponse.ok) {
+        throw new Error('Failed to add reply to queue');
+      }
+      
+      // Update local state
       onAddToQueue({
         username: selectedAccount.username,
         originalTweet: post.text,
@@ -229,7 +327,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                 <ListItemButton onClick={() => handleAccountClick(account)}>
                   <ListItemAvatar>
                     <Avatar sx={{ bgcolor: 'primary.main' }}>
-                      <XIcon />
+                      <XIcon sx={{ color: '#FFFFFF' }} />
                     </Avatar>
                   </ListItemAvatar>
                   <ListItemText 
@@ -292,7 +390,13 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                 alignItems: 'center',
                                 gap: 1,
                               }}>
-                                <XIcon fontSize="small" color="action" />
+                                <XIcon 
+                                  fontSize="small" 
+                                  sx={{ 
+                                    color: theme.palette.mode === 'dark' ? '#FFFFFF' : 'rgba(0, 0, 0, 0.54)',
+                                    filter: 'none !important'
+                                  }} 
+                                />
                                 <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
                                   Original Tweet
                                 </Typography>
@@ -411,7 +515,13 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                               alignItems: 'center',
                               gap: 1,
                             }}>
-                              <XIcon fontSize="small" color="action" />
+                              <XIcon 
+                                fontSize="small" 
+                                sx={{ 
+                                  color: theme.palette.mode === 'dark' ? '#FFFFFF' : 'rgba(0, 0, 0, 0.54)',
+                                  filter: 'none !important'
+                                }} 
+                              />
                               <Typography variant="subtitle2" color="text.secondary" sx={{ fontWeight: 600 }}>
                                 Suggested Reply
                               </Typography>
@@ -656,7 +766,7 @@ const TrackedAccountsList = ({ onAddToQueue, onRemoveFromQueue, approvedReplies,
                                     size="small" 
                                     variant="contained"
                                     onClick={() => {
-                                      generateReply(currentTweet);
+                                      generateReply(currentTweet, true);
                                       setAnchorEl(null);
                                       setEditingContext(false);
                                     }}

@@ -8,6 +8,7 @@ const XAILogo = ({ sx = {} }) => (
       width: sx.fontSize || '24px',
       height: sx.fontSize || '24px',
       objectFit: 'contain', // Added to maintain aspect ratio
+      filter: 'none !important', // Prevent color inversion in dark mode
       ...sx
     }}
   />

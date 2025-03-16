@@ -5,6 +5,7 @@ import getTheme from './theme';
 import Auth from './components/Auth/Auth';
 import Dashboard from './components/Dashboard/Dashboard';
 import Profile from './components/Profile/Profile';
+import IdeasPage from './pages/IdeasPage';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import './App.css';
@@ -27,6 +28,14 @@ const ThemedApp = () => {
           element={
             <PrivateRoute>
               <Dashboard />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="/ideas"
+          element={
+            <PrivateRoute>
+              <IdeasPage />
             </PrivateRoute>
           }
         />

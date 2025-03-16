@@ -11,6 +11,7 @@ import {
   Divider,
   Typography,
   Switch,
+  useTheme as useMuiTheme
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -24,7 +25,6 @@ import {
   Schedule as ScheduleIcon,
   DarkMode as DarkModeIcon,
 } from '@mui/icons-material';
-import theme from '../../theme';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -33,19 +33,25 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const { mode, toggleTheme } = useTheme();
+  const muiTheme = useMuiTheme();
 
   const handleLogout = () => {
     logout();
   };
 
+  // Define icon color based on theme mode
+  const getIconColor = () => {
+    return mode === 'dark' ? '#FFFFFF' : 'rgba(0, 0, 0, 0.7)';
+  };
+
   const menuItems = [
-    { title: 'Profile', icon: <ProfileIcon />, action: () => navigate('/profile') },
-    { title: 'Account Management', icon: <AccountIcon />, action: () => console.log('Account clicked') },
-    { title: 'Scheduler', icon: <ScheduleIcon />, action: () => console.log('Scheduler clicked') },
-    { title: 'Settings', icon: <SettingsIcon />, action: () => console.log('Settings clicked') },
-    { title: 'Security', icon: <SecurityIcon />, action: () => console.log('Security clicked') },
-    { title: 'Notifications', icon: <NotificationsIcon />, action: () => console.log('Notifications clicked') },
-    { title: 'Help & Support', icon: <HelpIcon />, action: () => console.log('Help clicked') },
+    { title: 'Profile', icon: <ProfileIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => navigate('/profile') },
+    { title: 'Account Management', icon: <AccountIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => console.log('Account clicked') },
+    { title: 'Scheduler', icon: <ScheduleIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => console.log('Scheduler clicked') },
+    { title: 'Settings', icon: <SettingsIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => console.log('Settings clicked') },
+    { title: 'Security', icon: <SecurityIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => console.log('Security clicked') },
+    { title: 'Notifications', icon: <NotificationsIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => console.log('Notifications clicked') },
+    { title: 'Help & Support', icon: <HelpIcon sx={{ color: getIconColor(), filter: 'none !important' }} />, action: () => console.log('Help clicked') },
   ];
 
   return (
@@ -68,7 +74,8 @@ const Sidebar = () => {
         >
           <MenuIcon sx={{ 
             fontSize: 32,
-            filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.2))',
+            filter: 'none !important',
+            color: '#FFFFFF',
           }} />
         </IconButton>
       )}
@@ -96,14 +103,15 @@ const Sidebar = () => {
           <Typography 
             variant="h5" 
             sx={{ 
-              fontWeight: 600,
-              letterSpacing: '1px',
+              fontFamily: '"Poppins", sans-serif',
+              fontWeight: 500,
+              letterSpacing: '0.5px',
               color: '#fff',
               textShadow: '0 2px 4px rgba(0,0,0,0.2)',
               textTransform: 'uppercase',
             }}
           >
-            Xpress AI
+            XPRESS AI
           </Typography>
         </Box>
 
@@ -124,7 +132,10 @@ const Sidebar = () => {
               >
                 <ListItemIcon sx={{ 
                   minWidth: 40,
-                  color: 'primary.main' 
+                  color: getIconColor(),
+                  '& .MuiSvgIcon-root': {
+                    filter: 'none !important',
+                  }
                 }}>
                   {item.icon}
                 </ListItemIcon>
@@ -145,9 +156,9 @@ const Sidebar = () => {
             >
               <ListItemIcon sx={{ 
                 minWidth: 40,
-                color: 'primary.main' 
+                color: getIconColor(),
               }}>
-                <DarkModeIcon />
+                <DarkModeIcon sx={{ color: getIconColor(), filter: 'none !important' }} />
               </ListItemIcon>
               <ListItemText primary="Dark Mode" />
               <Switch 
@@ -171,7 +182,7 @@ const Sidebar = () => {
               }}
             >
               <ListItemIcon sx={{ minWidth: 40, color: 'inherit' }}>
-                <LogoutIcon />
+                <LogoutIcon sx={{ filter: 'none !important' }} />
               </ListItemIcon>
               <ListItemText primary="Logout" />
             </ListItem>

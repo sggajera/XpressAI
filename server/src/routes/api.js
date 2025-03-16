@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
-const { User, Account, Context, Post } = require('../models');
+const { User, Account, Context, Post, TwitterAuth } = require('../models');
 const twitter = require('../services/twitter');
+const twitterOAuth = require('../services/twitterOAuth');
 
 // Get user profile with populated references
 router.get('/profile', async (req, res) => {
@@ -362,19 +363,37 @@ router.post('/twitter/approved-replies', async (req, res) => {
       });
     }
 
-    post.reply = {
-      replyText: reply.replyText,
-      repliedBy: req.user._id,
-      queuedAt: new Date(),
-      inQueue: true,
-      approvedAt: new Date(),
-      approvedBy: req.user._id,
-      tone: reply.tone,
-      userGeneralContext: reply.userGeneralContext,
-      aiEditContext: reply.aiEditContext,
-      suggestedReply: reply.suggestedReply,
-      afterTextEditReply: reply.afterTextEditReply
-    };
+    // Check if the post already has a reply
+    if (!post.reply || !post.reply.replyText) {
+      // Create a new reply if none exists
+      post.reply = {
+        replyText: reply.replyText,
+        repliedBy: req.user._id,
+        generatedAt: new Date(),
+        queuedAt: new Date(),
+        inQueue: true,
+        approvedAt: new Date(),
+        approvedBy: req.user._id,
+        tone: reply.tone,
+        userGeneralContext: reply.userGeneralContext,
+        aiEditContext: reply.aiEditContext,
+        suggestedReply: reply.suggestedReply,
+        afterTextEditReply: reply.afterTextEditReply
+      };
+    } else {
+      // Update existing reply
+      post.reply.replyText = reply.replyText;
+      post.reply.updatedAt = new Date();
+      post.reply.queuedAt = new Date();
+      post.reply.inQueue = true;
+      post.reply.approvedAt = new Date();
+      post.reply.approvedBy = req.user._id;
+      post.reply.tone = reply.tone || post.reply.tone;
+      post.reply.userGeneralContext = reply.userGeneralContext || post.reply.userGeneralContext;
+      post.reply.aiEditContext = reply.aiEditContext || post.reply.aiEditContext;
+      post.reply.suggestedReply = reply.suggestedReply || post.reply.suggestedReply;
+      post.reply.afterTextEditReply = reply.afterTextEditReply || post.reply.afterTextEditReply;
+    }
 
     await post.save();
 
@@ -526,6 +545,328 @@ router.put('/context', async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Get reply for a specific post
+router.get('/twitter/post-reply/:postId', async (req, res) => {
+  try {
+    const { postId } = req.params;
+    
+    const post = await Post.findOne({ 
+      postId: postId,
+      trackedBy: req.user._id
+    });
+
+    if (!post) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Post not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      data: post
+    });
+  } catch (error) {
+    console.error('Error fetching post reply:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Store a reply in the Post object
+router.post('/twitter/store-reply', async (req, res) => {
+  try {
+    const { postId, replyText, forceUpdate } = req.body;
+    
+    if (!postId || !replyText) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Post ID and reply text are required' 
+      });
+    }
+
+    const post = await Post.findOne({ 
+      postId: postId,
+      trackedBy: req.user._id
+    });
+
+    if (!post) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Post not found' 
+      });
+    }
+
+    // Check if post already has a reply and we're not forcing an update
+    if (post.reply && post.reply.replyText && !forceUpdate) {
+      return res.json({ 
+        success: true, 
+        message: 'Post already has a reply',
+        data: post
+      });
+    }
+
+    // Create or update the reply
+    if (!post.reply) {
+      post.reply = {
+        replyText: replyText,
+        repliedBy: req.user._id,
+        generatedAt: new Date(),
+        inQueue: false
+      };
+    } else {
+      post.reply.replyText = replyText;
+      post.reply.updatedAt = new Date();
+    }
+
+    await post.save();
+
+    res.json({ 
+      success: true, 
+      data: post 
+    });
+  } catch (error) {
+    console.error('Error storing reply:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+// Twitter OAuth Routes
+
+// Start OAuth flow
+router.get('/twitter/oauth/login', async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Generate auth URL
+    const { url, codeVerifier, state } = await twitterOAuth.generateAuthUrl(userId);
+    
+    // Store code verifier in session
+    req.session = req.session || {};
+    req.session.twitterOAuth = {
+      codeVerifier,
+      state,
+      userId: userId.toString()
+    };
+    
+    console.log('Setting session data:', {
+      sessionId: req.session.id,
+      state,
+      hasCodeVerifier: !!codeVerifier
+    });
+    
+    // Force session save and wait for it to complete
+    await new Promise((resolve, reject) => {
+      req.session.save(err => {
+        if (err) {
+          console.error('Error saving session:', err);
+          reject(err);
+        } else {
+          console.log('Session saved successfully');
+          resolve();
+        }
+      });
+    });
+    
+    // Return the auth URL
+    res.json({
+      success: true,
+      url,
+      sessionId: req.session.id // Include session ID for debugging
+    });
+  } catch (error) {
+    console.error('Twitter OAuth login error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// OAuth callback
+router.get('/twitter/oauth/callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+    
+    console.log('Received callback with params:', req.query);
+    console.log('Session data:', req.session);
+    
+    // Check for error from Twitter
+    if (error) {
+      console.error('Twitter OAuth error:', error, error_description);
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent(error_description || error)}`);
+    }
+    
+    // Check for missing code or state
+    if (!code || !state) {
+      console.error('Missing code or state in callback');
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent('Missing authorization code or state')}`);
+    }
+    
+    // Get code verifier from session
+    if (!req.session || !req.session.twitterOAuth) {
+      console.error('Invalid session or missing twitterOAuth data');
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent('Session expired or invalid')}`);
+    }
+    
+    const { codeVerifier } = req.session.twitterOAuth;
+    
+    if (!codeVerifier) {
+      console.error('Missing code verifier in session');
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent('Missing authentication data')}`);
+    }
+    
+    // Handle callback
+    const result = await twitterOAuth.handleCallback(code, state, codeVerifier);
+    
+    // Clear session data
+    delete req.session.twitterOAuth;
+    
+    // Save the session before redirecting
+    req.session.save((err) => {
+      if (err) {
+        console.error('Error saving session after callback:', err);
+      }
+      
+      // Redirect to success page with hash routing
+      res.redirect(`/#/profile?twitter_connected=true&username=${result.username}`);
+    });
+  } catch (error) {
+    console.error('Twitter OAuth callback error:', error);
+    res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent(error.message || 'Unknown error occurred')}`);
+  }
+});
+
+// Get user's connected Twitter accounts
+router.get('/twitter/accounts', async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Get user's Twitter accounts
+    const accounts = await twitterOAuth.getUserTwitterAccounts(userId);
+    
+    res.json({
+      success: true,
+      accounts
+    });
+  } catch (error) {
+    console.error('Error getting Twitter accounts:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Disconnect a Twitter account
+router.delete('/twitter/accounts/:twitterId', async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { twitterId } = req.params;
+    
+    // Disconnect the account
+    await twitterOAuth.disconnectTwitterAccount(userId, twitterId);
+    
+    res.json({
+      success: true
+    });
+  } catch (error) {
+    console.error('Error disconnecting Twitter account:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Post a tweet as the user
+router.post('/twitter/tweet-as-user', async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { text, replyToId } = req.body;
+    
+    if (!text) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tweet text is required'
+      });
+    }
+    
+    // Post the tweet
+    const tweet = await twitterOAuth.postTweetAsUser(userId, text, replyToId);
+    
+    res.json({
+      success: true,
+      tweet
+    });
+  } catch (error) {
+    console.error('Error posting tweet as user:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Debug Twitter OAuth configuration
+router.get('/twitter/oauth/debug', async (req, res) => {
+  try {
+    // Check if Twitter OAuth credentials are set
+    const config = {
+      clientId: process.env.TWITTER_CLIENT_ID ? 'Set' : 'Not set',
+      clientSecret: process.env.TWITTER_CLIENT_SECRET ? 'Set' : 'Not set',
+      callbackUrl: process.env.TWITTER_CALLBACK_URL || 'http://localhost:8081/api/twitter/oauth/callback',
+      sessionSecret: (process.env.SESSION_SECRET || process.env.JWT_SECRET) ? 'Set' : 'Not set'
+    };
+    
+    // Check if session is working
+    req.session.debug = {
+      timestamp: Date.now(),
+      message: 'Debug session test'
+    };
+    
+    // Check state store
+    const stateStoreSize = twitterOAuth.getStateStoreSize();
+    
+    // Check if we can create a Twitter client
+    let clientTest = 'Failed';
+    try {
+      const client = twitterOAuth.createTestClient();
+      clientTest = 'Success';
+    } catch (error) {
+      clientTest = `Error: ${error.message}`;
+    }
+    
+    res.json({
+      success: true,
+      config,
+      session: {
+        id: req.session.id,
+        cookie: req.session.cookie,
+        debug: req.session.debug
+      },
+      stateStore: {
+        size: stateStoreSize
+      },
+      clientTest,
+      env: {
+        NODE_ENV: process.env.NODE_ENV || 'not set'
+      }
+    });
+  } catch (error) {
+    console.error('Twitter OAuth debug error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 

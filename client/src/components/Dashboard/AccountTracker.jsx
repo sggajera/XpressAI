@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -8,8 +8,15 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  IconButton,
+  Tooltip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import SettingsIcon from '@mui/icons-material/Settings';
 import XIcon from '../Icons/XIcon';
 import { useAuth } from '../../context/AuthContext';
 
@@ -17,7 +24,60 @@ const AccountTracker = ({ onAccountAdded }) => {
   const [username, setUsername] = useState('');
   const [trackingResult, setTrackingResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [openContext, setOpenContext] = useState(false);
+  const [globalContext, setGlobalContext] = useState('');
+  const [contextLoading, setContextLoading] = useState(false);
   const { getStoredToken } = useAuth();
+
+  // Fetch initial global context
+  useEffect(() => {
+    const fetchGlobalContext = async () => {
+      try {
+        const token = getStoredToken();
+        const response = await fetch('/api/context', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+        const data = await response.json();
+        if (data.success && data.data) {
+          setGlobalContext(data.data.userGeneralContext || '');
+        }
+      } catch (error) {
+        console.error('Error fetching global context:', error);
+      }
+    };
+    fetchGlobalContext();
+  }, [getStoredToken]);
+
+  const handleContextSave = async () => {
+    try {
+      setContextLoading(true);
+      const token = getStoredToken();
+      const response = await fetch('/api/context', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          userGeneralContext: globalContext
+        })
+      });
+
+      const data = await response.json();
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to update context');
+      }
+
+      setOpenContext(false);
+    } catch (error) {
+      console.error('Error saving context:', error);
+    } finally {
+      setContextLoading(false);
+    }
+  };
 
   const startTracking = async () => {
     try {
@@ -71,85 +131,87 @@ const AccountTracker = ({ onAccountAdded }) => {
       }}>
         <Box sx={{ 
           width: '100%',
-          maxWidth: 500,
+          maxWidth: 800,
           display: 'flex',
           alignItems: 'center',
           gap: 2,
           mx: 'auto',
         }}>
-          <TextField
-            fullWidth
-            size="medium"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="Enter an X username to start tracking."
-            variant="outlined"
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Typography color="text.secondary" sx={{ fontSize: '1.1rem' }}>@</Typography>
-                </InputAdornment>
-              ),
-              sx: {
-                bgcolor: 'background.paper',
-                height: '48px',
-                fontSize: '1.1rem',
-              }
-            }}
-          />
-          <Button
-            variant="contained"
-            onClick={startTracking}
-            disabled={loading || !username}
-            sx={{
-              background: 'linear-gradient(145deg, #2C2C2C 0%, #1A1A1A 100%)',
-              boxShadow: `
-                0 2px 4px rgba(0,0,0,0.2),
-                inset 0 1px 1px rgba(255,255,255,0.1),
-                inset 0 -1px 1px rgba(0,0,0,0.2)
-              `,
-              color: '#E8E8E8',
-              minWidth: 'auto',
-              width: '48px',
-              height: '48px',
-              borderRadius: '8px',
-              border: '1px solid rgba(255,255,255,0.05)',
-              position: 'relative',
-              overflow: 'hidden',
-              '&:before': {
-                content: '""',
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                height: '50%',
-                background: 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%)',
-                borderRadius: '7px 7px 0 0',
-              },
-              '&:hover': {
-                background: 'linear-gradient(145deg, #333333 0%, #222222 100%)',
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <TextField
+              size="medium"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter an X username to start tracking."
+              variant="outlined"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Typography color="text.secondary" sx={{ fontSize: '1.1rem' }}>@</Typography>
+                  </InputAdornment>
+                ),
+                sx: {
+                  bgcolor: 'background.paper',
+                  height: '48px',
+                  fontSize: '1.1rem',
+                  width: '300px'
+                }
+              }}
+            />
+            <Button
+              variant="contained"
+              onClick={startTracking}
+              disabled={loading || !username}
+              sx={{
+                background: 'linear-gradient(145deg, #2C2C2C 0%, #1A1A1A 100%)',
                 boxShadow: `
-                  0 4px 8px rgba(0,0,0,0.3),
-                  inset 0 1px 1px rgba(255,255,255,0.15),
-                  inset 0 -1px 1px rgba(0,0,0,0.3)
+                  0 2px 4px rgba(0,0,0,0.2),
+                  inset 0 1px 1px rgba(255,255,255,0.1),
+                  inset 0 -1px 1px rgba(0,0,0,0.2)
                 `,
-              },
-              '&:active': {
-                background: 'linear-gradient(145deg, #1A1A1A 0%, #2C2C2C 100%)',
-                boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
-              },
-            }}
-          >
-            {loading ? (
-              <CircularProgress size={24} color="inherit" />
-            ) : (
-              <AddIcon sx={{ 
-                fontSize: 24,
-                filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))',
-                color: '#FFFFFF',
-              }} />
-            )}
-          </Button>
+                color: '#E8E8E8',
+                minWidth: 'auto',
+                width: '48px',
+                height: '48px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255,255,255,0.05)',
+                position: 'relative',
+                overflow: 'hidden',
+                '&:before': {
+                  content: '""',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: '50%',
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%)',
+                  borderRadius: '7px 7px 0 0',
+                },
+                '&:hover': {
+                  background: 'linear-gradient(145deg, #333333 0%, #222222 100%)',
+                  boxShadow: `
+                    0 4px 8px rgba(0,0,0,0.3),
+                    inset 0 1px 1px rgba(255,255,255,0.15),
+                    inset 0 -1px 1px rgba(0,0,0,0.3)
+                  `,
+                },
+                '&:active': {
+                  background: 'linear-gradient(145deg, #1A1A1A 0%, #2C2C2C 100%)',
+                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.3)',
+                },
+              }}
+            >
+              {loading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                <AddIcon sx={{ 
+                  fontSize: 24,
+                  filter: 'drop-shadow(0 1px 1px rgba(0,0,0,0.3))',
+                  color: '#FFFFFF',
+                }} />
+              )}
+            </Button>
+          </Box>
         </Box>
 
         {/* Alert Messages */}
@@ -171,6 +233,42 @@ const AccountTracker = ({ onAccountAdded }) => {
           </Box>
         )}
       </Box>
+
+      {/* Global Context Dialog */}
+      <Dialog 
+        open={openContext} 
+        onClose={() => setOpenContext(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Set Global Context</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Global Context"
+            fullWidth
+            multiline
+            rows={4}
+            value={globalContext}
+            onChange={(e) => setGlobalContext(e.target.value)}
+            placeholder="Enter global context for AI responses..."
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenContext(false)}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleContextSave}
+            variant="contained"
+            disabled={contextLoading}
+          >
+            {contextLoading ? 'Saving...' : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 };

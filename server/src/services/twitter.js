@@ -118,7 +118,7 @@ const getUserTweets = async (twitterId, userId) => {
       }
     });
 
-    const tweets = await client.v2.userTimeline(twitterId, {
+    const tweets = await client.userTimeline(twitterId, {
       max_results: 5,
       exclude: ['replies', 'retweets'],
       'tweet.fields': ['created_at', 'public_metrics', 'text']
@@ -168,7 +168,7 @@ const getMultipleUsersTweets = async (usernames, userId) => {
       }
     });
 
-    const tweets = await client.v2.search(query, {
+    const tweets = await client.search(query, {
       start_time: startTime,
       max_results: 100,
       'tweet.fields': ['created_at', 'public_metrics', 'text', 'author_id'],
@@ -398,7 +398,7 @@ const startTracking = async (username, userId) => {
     });
 
     // Get user info first
-    const user = await client.v2.userByUsername(username);
+    const user = await client.userByUsername(username);
     if (!user?.data) {
       throw new Error('User not found');
     }
@@ -437,58 +437,57 @@ const postTweet = async (text, replyToId = null, userId = null) => {
 
     // Verify client initialization
     if (!client) {
+      console.error('Twitter client not initialized');
       throw new Error('Twitter client not initialized');
     }
 
-    // Check if we have write permissions by checking app settings
+    // Verify we can post by trying to get our own user info
     try {
-      const appSettings = await client.v2.get('account/verify_credentials');
-      console.log('Twitter App Settings:', appSettings);
-    } catch (settingsError) {
-      console.error('Failed to verify Twitter credentials:', settingsError);
-      if (settingsError.data?.status === 403) {
-        throw new Error('Twitter API: Insufficient permissions. Please ensure your Twitter App has Read and Write permissions enabled.');
+      console.log('Verifying Twitter credentials...');
+      const me = await client.v2.me();
+      console.log('Twitter credentials verified:', me);
+    } catch (verifyError) {
+      console.error('Failed to verify Twitter credentials:', verifyError);
+      
+      if (verifyError.code === 403) {
+        console.error('OAuth Permission Error Details:', {
+          error: verifyError.data?.error,
+          description: verifyError.data?.error_description
+        });
+        throw new Error('OAuth permission error: Please check your app permissions in the Twitter Developer Portal');
       }
+      throw verifyError;
     }
 
-    const tweetParams = {
+    // Create the tweet data object according to v2 API schema
+    const tweetData = replyToId ? {
       text,
-      ...(replyToId && { reply: { in_reply_to_tweet_id: replyToId } }),
+      reply: {
+        in_reply_to_tweet_id: replyToId
+      }
+    } : {
+      text
     };
 
-    console.log('📤 Tweet parameters:', JSON.stringify(tweetParams, null, 2));
+    // Post the tweet using v2 endpoint
+    console.log('Posting tweet with data:', tweetData);
+    const response = await client.v2.tweet(tweetData);
 
-    const tweet = await client.v2.tweet(tweetParams);
-
-    // Log response
-    console.log('✅ Twitter API Response:', {
-      success: true,
-      tweetId: tweet.data.id,
-      response: JSON.stringify(tweet, null, 2),
-      timestamp: new Date().toISOString()
-    });
-
-    // Update timestamp if userId is provided
+    // Update API call timestamp if userId is provided
     if (userId) {
       await updateApiCallTimestamp(userId);
     }
 
-    return tweet;
+    return response;
   } catch (error) {
-    // Log error with detailed information
-    console.error('❌ Twitter API Error:', {
-      error: error.message,
-      data: error.data,
-      code: error.code,
-      stack: error.stack,
-      timestamp: new Date().toISOString()
-    });
-
-    // Handle specific OAuth errors
-    if (error.data?.status === 403 && error.data?.detail?.includes('oauth1')) {
-      throw new Error('Twitter API: Your app needs Read and Write permissions. Please update your Twitter Developer App settings.');
+    console.error('Error posting tweet:', error);
+    
+    // Enhanced error handling
+    if (error.data?.errors) {
+      const errorDetails = error.data.errors.map(e => e.message).join(', ');
+      throw new Error(`Twitter API Error: ${errorDetails}`);
     }
-
+    
     throw error;
   }
 };
@@ -509,7 +508,7 @@ const getTweet = async (tweetId, userId = null) => {
       }
     });
 
-    const tweet = await client.v2.singleTweet(tweetId, {
+    const tweet = await client.singleTweet(tweetId, {
       'tweet.fields': ['created_at', 'public_metrics', 'text']
     });
 
@@ -687,5 +686,6 @@ module.exports = {
   removeApprovedReply,
   handleRemoveFromQueue,
   handleUnapprove,
-  getTrackedAccounts
+  getTrackedAccounts,
+  updateApiCallTimestamp
 }; 

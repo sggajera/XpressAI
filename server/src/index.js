@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path');
 const connectDB = require('./config/db');
 const mongoose = require('mongoose');
+const session = require('express-session');
 const { generateReply } = require('./services/openai');
 const { postTweet, getTweet, testConnection, startTracking, getTrackedAccounts } = require('./services/twitter');
 const auth = require('./middleware/auth');
@@ -16,14 +17,111 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 // Connect to MongoDB
 connectDB();
 
+// Import required modules at the top of your file
+const { TwitterAuth, User } = require('./models');
+const twitterOAuth = require('./services/twitterOAuth');
+
+// Add this BEFORE any middleware or other routes
+app.get('/api/twitter/oauth/callback', async (req, res) => {
+  try {
+    const { code, state, error, error_description } = req.query;
+    
+    console.log('Received Twitter callback with params:', req.query);
+    console.log('Session ID:', req.session?.id);
+    console.log('Session data:', req.session);
+    
+    // Check for error from Twitter
+    if (error) {
+      console.error('Twitter OAuth error:', error, error_description);
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent(error_description || error)}`);
+    }
+    
+    // Check for missing code or state
+    if (!code || !state) {
+      console.error('Missing code or state in callback');
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent('Missing authorization code or state')}`);
+    }
+    
+    // Since we're having session issues, let's try a workaround
+    // We'll use the state parameter to identify the user
+    // This is less secure but will help us debug the issue
+    
+    try {
+      // Try to get the user from the state store in twitterOAuth service
+      const result = await twitterOAuth.handleCallbackWithState(code, state);
+      
+      if (result && result.success) {
+        return res.redirect(`/#/profile?twitter_connected=true&username=${result.username}`);
+      }
+    } catch (stateError) {
+      console.error('Error handling callback with state:', stateError);
+      // Continue to try with session if state handling fails
+    }
+    
+    // Get code verifier from session
+    if (!req.session || !req.session.twitterOAuth) {
+      console.error('Invalid session or missing twitterOAuth data');
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent('Session expired or invalid')}`);
+    }
+    
+    const { codeVerifier } = req.session.twitterOAuth;
+    
+    if (!codeVerifier) {
+      console.error('Missing code verifier in session');
+      return res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent('Missing authentication data')}`);
+    }
+    
+    // Handle callback
+    const result = await twitterOAuth.handleCallback(code, state, codeVerifier);
+    
+    // Clear session data
+    delete req.session.twitterOAuth;
+    
+    // Save the session before redirecting
+    req.session.save((err) => {
+      if (err) {
+        console.error('Error saving session after callback:', err);
+      }
+      
+      // Redirect to success page with hash routing
+      res.redirect(`/#/profile?twitter_connected=true&username=${result.username}`);
+    });
+  } catch (error) {
+    console.error('Twitter OAuth callback error:', error);
+    res.redirect(`/#/profile?twitter_connected=false&error=${encodeURIComponent(error.message || 'Unknown error occurred')}`);
+  }
+});
+
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'http://localhost:8081'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
+
+// Add session support
+app.use(session({
+  secret: process.env.SESSION_SECRET || process.env.JWT_SECRET,
+  resave: true,
+  saveUninitialized: true,
+  cookie: {
+    secure: false, // Set to false for local development
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    sameSite: 'none', // Changed from 'lax' to allow cross-site cookies
+    path: '/'
+  },
+  name: 'xpress.sid', // Custom name to avoid default connect.sid
+  store: new session.MemoryStore() // Explicitly use memory store for testing
+}));
+
+// Debug middleware for session tracking
+app.use((req, res, next) => {
+  console.log('Session ID:', req.session.id);
+  next();
+});
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -214,16 +312,14 @@ app.get('/api/twitter/tracked-accounts', async (req, res) => {
   }
 });
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  // Serve static files from the React app
-  app.use(express.static(path.join(__dirname, '../../client/build')));
+// Serve static files from the React app
+app.use(express.static(path.join(__dirname, '../../client/build')));
 
-  // Handle React routing, return all requests to React app
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../client/build', 'index.html'));
-  });
-}
+// The "catchall" handler: for any request that doesn't match an API route,
+// send back the React app's index.html file.
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, '../../client/build/index.html'));
+});
 
 const PORT = process.env.PORT || 8081;
 

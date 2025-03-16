@@ -10,11 +10,13 @@ const replySchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  generatedAt: Date,
+  updatedAt: Date,
   queuedAt: Date,
   sentAt: Date,
   inQueue: {
     type: Boolean,
-    default: true
+    default: false
   },
   approvedAt: Date,
   approvedBy: {

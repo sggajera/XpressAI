@@ -14,6 +14,7 @@ import {
   Collapse,
   IconButton,
   Tooltip,
+  useTheme
 } from '@mui/material';
 import { 
   Send as SendIcon, 
@@ -29,6 +30,7 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
   const [sending, setSending] = useState(new Set());
   const [sendingAll, setSendingAll] = useState(false);
   const { getStoredToken } = useAuth();
+  const theme = useTheme();
 
   const makeAuthenticatedRequest = async (url, options = {}) => {
     const token = getStoredToken();
@@ -249,7 +251,13 @@ const ReplyQueue = ({ queuedReplies = [], onRemoveReply }) => {
               <Card variant="outlined" sx={{ width: '100%', position: 'relative' }}>
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <XIcon fontSize="small" />
+                    <XIcon 
+                      fontSize="small" 
+                      sx={{ 
+                        color: theme.palette.mode === 'dark' ? '#FFFFFF' : 'rgba(0, 0, 0, 0.54)',
+                        filter: 'none !important'
+                      }} 
+                    />
                     <Typography variant="subtitle2">
                       {reply.username}
                     </Typography>
