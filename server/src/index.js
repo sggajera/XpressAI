@@ -5,7 +5,7 @@ const path = require('path');
 const connectDB = require('./config/db');
 const mongoose = require('mongoose');
 const session = require('express-session');
-const { generateReply } = require('./services/openai');
+const { generateReply , generateReplyGrok} = require('./services/openai');
 const { postTweet, getTweet, testConnection, startTracking, getTrackedAccounts } = require('./services/twitter');
 const auth = require('./middleware/auth');
 
@@ -192,9 +192,9 @@ app.post('/api/test-reply', async (req, res) => {
       return res.status(400).json({ error: 'Tweet is required' });
     }
 
-    const reply = await generateReply(
+    const reply = await generateReplyGrok(
       tweet, 
-      context || 'Be professional and friendly'
+      context || 'Be sarcastic and human like'
     );
 
     res.json({ reply });
